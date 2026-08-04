@@ -1,40 +1,76 @@
+import { environmentalist } from '@lostgradient/environmentalist';
 import { z } from 'zod';
 
 /**
- * Schema for the environment variables this package reads.
- *
- * Add new variables here as your project grows, then document them in
- * `.env.example`. Keeping the schema as the single source of truth means a
- * missing or malformed variable fails fast at startup instead of surfacing as
- * an `undefined` somewhere deep in your code.
+ * Schema for the configuration this package reads. Resolved through
+ * @lostgradient/environmentalist, so values may come from the process
+ * environment, a `.env` file, or a `skillset.config.*` / XDG config file —
+ * not just `process.env`.
  */
 const environmentSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-  PORT: z.coerce.number().int().positive().default(3000),
+  SKILLSET_DIRECTORY: z.string().optional(),
 });
 
 /** The shape of the validated environment. */
 export type Environment = z.infer<typeof environmentSchema>;
 
+function compact(source: Record<string, string | undefined>): Record<string, string> {
+  const result: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(source)) {
+    if (value !== undefined) result[key] = value;
+  }
+
+  return result;
+}
+
+type Resolved = {
+  nodeEnv: Environment['NODE_ENV'];
+  skillsetDirectory?: string | undefined;
+};
+
+function toEnvironment(resolved: Resolved): Environment {
+  const environment: Environment = { NODE_ENV: resolved.nodeEnv };
+  if (resolved.skillsetDirectory !== undefined) {
+    environment.SKILLSET_DIRECTORY = resolved.skillsetDirectory;
+  }
+
+  return environment;
+}
+
 /**
- * Parse and validate the given environment record against {@link environmentSchema}.
+ * Validate the given environment record against the schema.
  *
- * Exposed separately from {@link environment} so tests can validate arbitrary
- * inputs without mutating `process.env`.
+ * Exposed separately from {@link environment} so tests and callers can
+ * validate arbitrary inputs; restricted to the injected record plus schema
+ * defaults (no dotenv/config-file resolution) for determinism.
  *
- * @param source - The raw environment record to validate. Defaults to `process.env`.
- * @returns The validated, typed environment.
- * @throws {z.ZodError} If `source` does not satisfy the schema.
+ * @throws {Error} If `source` does not satisfy the schema.
  */
 export function parseEnvironment(
   source: Record<string, string | undefined> = process.env,
 ): Environment {
-  return environmentSchema.parse(source);
+  return toEnvironment(
+    environmentalist.sync({
+      name: 'skillset',
+      schema: environmentSchema,
+      env: compact(source),
+      sources: ['env', 'defaults'],
+    }),
+  );
 }
 
 /**
- * The validated environment, parsed once from `process.env` at module load.
- *
- * This is the single source of truth for configuration throughout the package.
+ * The validated configuration, resolved once at module load through the full
+ * environmentalist source chain (environment variables, dotenv, project and
+ * user config files) — everything except CLI flags, which this package parses
+ * itself.
  */
-export const environment: Environment = parseEnvironment();
+export const environment: Environment = toEnvironment(
+  environmentalist.sync({
+    name: 'skillset',
+    schema: environmentSchema,
+    exclude: ['flags'],
+  }),
+);

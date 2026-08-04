@@ -45,11 +45,39 @@ bun run package:check    # Run publint + @arethetypeswrong/cli on packed tarball
 
 ## Architecture Overview
 
+`skillset` is a CLI that compiles a single source root (cwd or `$SKILLSET_DIRECTORY`, containing `skills/`, `agents/`, `mcp-servers.yaml`, `instructions.md`, `hooks.yaml`, and/or `defaults.yaml`) into the per-tool formats for Claude Code and Codex, at user scope (`~/`) or project scope (`--scope project`). See `README.md` for source formats, destinations, templating, and fallback rules; `documentation/ui-readiness.md` for the JSON contracts and ledger design; `.claude/skills/tool-format-reference` for the verified facts about both tools' surfaces.
+
+### Module Layout (`src/`)
+
+- `bin.ts` — executable entry (`skillset` bin); delegates to `cli.ts`.
+- `cli.ts` — command dispatch; all IO is injected via `CliDependencies` (cwd, env, homeDirectory, log) so tests run in temp dirs.
+- `invocation.ts` — `node:util` `parseArgs` argument parsing and usage text.
+- `analysis.ts` — discovers + doctor-checks every source kind into one `Analysis`.
+- `commands.ts` — `list`/`show`/`new`/`remove`/`get`/`set` CRUD over sources.
+- `commands-run.ts` — `sync`, `doctor --targets`, and `import` orchestration.
+- `discover.ts` — source-root resolution and enumeration of all six kinds.
+- `targets.ts` — `resolveTargets(scope, home, cwd)`: every destination path for both tools at both scopes, plus the ledger path.
+- `ledger.ts` — the sync ledger (v2): per-output hashes, timestamps, managed entries; v1 migration; `stableStringify`/`structurallyEqual`.
+- `drift.ts` — compares ledger items against disk (`clean`/`drift`/`missing`).
+- `frontmatter.ts` — skill union Zod schema, per-target projections, `agents/openai.yaml` derivation, shared `splitFrontmatter`/`isMapping`.
+- `agent-frontmatter.ts` / `agent-emit.ts` — agent union schema and Claude `.md` / Codex `.toml` emission.
+- `instructions.ts` — instructions.md conditional compile + `@import` checks.
+- `template.ts` — `<!-- #if claude/codex -->` conditional processing.
+- `fallback.ts` — Codex-only prose rewrites of Claude dynamic features.
+- `emit.ts` — skill compilation (frontmatter + body + generated marker + openai.yaml).
+- `doctor.ts` — skill and agent validation; errors block sync.
+- `mcp-config.ts` / `hooks-config.ts` / `defaults-config.ts` — the three single-file source schemas and their per-target mappings.
+- `mcp-apply.ts` / `hooks-apply.ts` / `defaults-apply.ts` — surgical application to the shared config files, entry-level ledger ownership, backups.
+- `config-files.ts` — shared JSON config read/write + backup helpers and the `EmbeddedAction` type.
+- `toml-splice.ts` — comment-preserving `[section]` and top-level-scalar splicing for `config.toml`.
+- `import.ts` — reverse-compiles installed skills/agents/instructions into sources.
+- `sync.ts` — plan/execute for the file-based kinds, marker ownership, drift skips, ledger recording.
+
 ### Core Design Principles
 
-1. **Environment-First Configuration**: All configuration starts with environment variables validated through Zod schemas in `src/environment.ts`. The `environment` object is the single source of truth.
+1. **Environment-First Configuration**: All configuration resolves through `@lostgradient/environmentalist` with a Zod schema in `src/environment.ts` (env vars, dotenv, `skillset.config.*`). The `environment` object is the single source of truth.
 
-2. **Lean Surface Area**: This template intentionally avoids framework-specific scaffolding (custom error classes, logger wrappers, etc.). Add only what you need for your project.
+2. **Marker + Ledger Ownership**: Sync only overwrites or prunes outputs it can prove it wrote — file outputs carry `GENERATED_MARKER`, config entries live in the ledger (`~/.config/skillset/state.json`) with content hashes. Hand-installed files are skipped as unmanaged; hand-edited managed outputs are skipped as drifted; both need `--force`.
 
 3. **Runtime-Neutral Published Code**: `src/` must not use Bun-only runtime APIs (`Bun.file`, `Bun.env`, `Bun.serve`, etc.). Those APIs are fine in `scripts/` and test files, but must not appear in published library output.
 

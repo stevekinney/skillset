@@ -1,7 +1,7 @@
 import { $ } from 'bun';
 import pkg from '../package.json' with { type: 'json' };
 
-const entrypoints = ['./src/index.ts'];
+const entrypoints = ['./src/index.ts', './src/bin.ts'];
 const external = Array.from(
   new Set([
     ...Object.keys(
@@ -37,6 +37,13 @@ await Promise.all(
     }),
   ),
 );
+
+// npm resolves the `bin` entry with the system loader, which needs a shebang.
+for (const target of ['node', 'bun'] as const) {
+  const path = `dist/${target}/bin.js`;
+  await Bun.write(path, `#!/usr/bin/env node\n${await Bun.file(path).text()}`);
+  await $`chmod +x ${path}`;
+}
 
 await $`bun run tsc --declaration --emitDeclarationOnly --project tsconfig.build.json`;
 

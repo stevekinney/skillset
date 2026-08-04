@@ -1,5 +1,5 @@
 {
-  "name": "skillset",
+  "name": "@lostgradient/skillset",
   "version": "0.0.1",
   "description": "",
   "license": "MIT",
@@ -17,6 +17,9 @@
   },
   "main": "./dist/node/index.js",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "skillset": "./dist/node/bin.js"
+  },
   "files": [
     "dist",
     "src",
@@ -46,14 +49,17 @@
     "verify:release-version": "bun run scripts/verify-release-version.ts"
   },
   "dependencies": {
+    "@lostgradient/environmentalist": "^0.0.2",
+    "chalk": "^6.0.0",
     "change-case": "^5.4.4",
+    "smol-toml": "^1.7.1",
+    "yaml": "^2.9.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
     "@types/bun": "^1.3.14",
     "@types/node": "^26.1.1",
-    "chalk": "^5.6.2",
     "lefthook": "^2.1.10",
     "oxlint": "^1.75.0",
     "oxlint-tsgolint": "^7.0.2001",

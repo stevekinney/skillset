@@ -39,7 +39,10 @@ jobs:
       - name: Validate
         run: bun run validate
 
-      # `validate` runs entirely under Bun. This step exercises the emitted
-      # Node bundle under the matrix Node version so the matrix is meaningful.
-      - name: Smoke-test Node build
-        run: node --input-type=module -e "import { greet } from './dist/node/index.js'; if (greet('Node') !== 'Hello, Node!') { throw new Error('Node build smoke test failed'); }"
+      # `validate` runs entirely under Bun. These steps exercise the emitted
+      # Node bundles under the matrix Node version so the matrix is meaningful.
+      - name: Smoke-test Node library build
+        run: node --input-type=module -e "import { runCli } from './dist/node/index.js'; if (typeof runCli !== 'function') { throw new Error('Node build smoke test failed'); }"
+
+      - name: Smoke-test Node CLI build
+        run: node ./dist/node/bin.js --help
