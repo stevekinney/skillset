@@ -18,7 +18,7 @@
   "main": "./dist/node/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
-    "skillset": "./dist/node/bin.js"
+    "skillset": "dist/node/bin.js"
   },
   "files": [
     "dist",
