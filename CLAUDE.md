@@ -43,6 +43,8 @@ bun run clean            # Clean build artifacts (dist/, coverage/, caches)
 bun run package:check    # Run publint + @arethetypeswrong/cli on packed tarball
 ```
 
+**`package:check` packs with `bun pm pack` itself and hands the tarball to `attw`, rather than using `attw --pack`.** `attw --pack` shells out to a hardcoded `npm pack` internally, which breaks when it runs nested inside an active `npm publish` — `npm publish` triggers the `prepublishOnly` script (`bun run validate`, which includes `package:check`) from _inside its own npm process_, and a second `npm pack` invoked from there fails silently, leaving `attw` to report a baffling `ENOENT: ... open '@lostgradient-skillset-<version>.tgz'` instead of the real cause. `scripts/check-package.ts` avoids this entirely. If that `ENOENT` ever reappears, something reintroduced `attw --pack`.
+
 ## Architecture Overview
 
 `skillset` is a CLI that compiles a single source root (cwd or `$SKILLSET_DIRECTORY`, containing `skills/`, `agents/`, `mcp-servers.yaml`, `instructions.md`, `hooks.yaml`, and/or `defaults.yaml`) into the per-tool formats for Claude Code and Codex, at user scope (`~/`) or project scope (`--scope project`). See `README.md` for source formats, destinations, templating, and fallback rules; `documentation/ui-readiness.md` for the JSON contracts and ledger design; `.claude/skills/tool-format-reference` for the verified facts about both tools' surfaces.
