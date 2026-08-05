@@ -210,20 +210,37 @@ export async function runSync(
   return 0;
 }
 
+/** One row of a `doctor --targets` drift report. */
+export type TargetStatusRow = {
+  key: string;
+  item: LedgerItem;
+  status: TargetStatus;
+};
+
+/** Compare every ledger item at one scope against disk. */
+export async function targetStatuses(
+  scope: Invocation['scope'],
+  context: RunContext,
+): Promise<TargetStatusRow[]> {
+  const targets = resolveTargets(scope, context.homeDirectory, context.cwd);
+  const ledger = await contextLedger(context, targets);
+
+  const rows: TargetStatusRow[] = [];
+  for (const [key, item] of Object.entries(ledger.items)) {
+    if (item.scope !== scope) continue;
+
+    rows.push({ key, item, status: await itemStatus(key, item) });
+  }
+
+  return rows;
+}
+
 /** Run `skillset doctor --targets`: check every managed output for drift. */
 export async function runDoctorTargets(
   invocation: Invocation,
   context: RunContext,
 ): Promise<number> {
-  const targets = contextTargets(invocation, context);
-  const ledger = await contextLedger(context, targets);
-
-  const rows: { key: string; item: LedgerItem; status: TargetStatus }[] = [];
-  for (const [key, item] of Object.entries(ledger.items)) {
-    if (item.scope !== invocation.scope) continue;
-
-    rows.push({ key, item, status: await itemStatus(key, item) });
-  }
+  const rows = await targetStatuses(invocation.scope, context);
 
   if (invocation.json) {
     context.log(

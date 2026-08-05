@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 
-import { parseInvocation, USAGE } from './invocation.js';
+import { commandHelp, USAGE } from './help.js';
+import { parseInvocation } from './invocation.js';
 
 function invocation(argv: string[]) {
   const parsed = parseInvocation(argv);
@@ -84,6 +85,7 @@ describe('parseInvocation', () => {
     });
     expect(invocation(['import', 'instructions']).importKind).toBe('instructions');
     expect(invocation(['sync', '--kind', 'hooks']).kind).toBe('hooks');
+    expect(invocation(['mcp']).command).toBe('mcp');
   });
 
   it('reports usage errors', () => {
@@ -111,5 +113,35 @@ describe('parseInvocation', () => {
   it('exports usage text', () => {
     expect(USAGE).toContain('skillset doctor');
     expect(USAGE).toContain('skillset set');
+  });
+
+  it('resolves --help to a usage outcome with no error, optionally with per-command help', () => {
+    const bare = parseInvocation(['--help']);
+    expect('usageError' in bare && bare.usageError).toBe('');
+    expect('usageError' in bare && bare.helpText).toBeUndefined();
+
+    const forSync = parseInvocation(['sync', '--help']);
+    expect('usageError' in forSync && forSync.usageError).toBe('');
+    expect('usageError' in forSync && forSync.helpText).toBe(commandHelp('sync'));
+
+    const forUnknown = parseInvocation(['deploy', '--help']);
+    expect('usageError' in forUnknown && forUnknown.usageError).toBe('');
+    expect('usageError' in forUnknown && forUnknown.helpText).toBeUndefined();
+
+    for (const command of [
+      'sync',
+      'doctor',
+      'list',
+      'show',
+      'new',
+      'remove',
+      'get',
+      'set',
+      'import',
+      'mcp',
+    ]) {
+      expect(typeof commandHelp(command)).toBe('string');
+    }
+    expect(commandHelp('bogus')).toBeUndefined();
   });
 });

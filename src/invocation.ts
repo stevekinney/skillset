@@ -2,6 +2,7 @@ import { parseArgs } from 'node:util';
 
 import type { SourceKind } from './commands.js';
 import type { Target } from './frontmatter.js';
+import { commandHelp } from './help.js';
 import type { ImportKind } from './import.js';
 import type { Scope } from './targets.js';
 
@@ -10,7 +11,8 @@ export type KindFilter = 'skills' | 'agents' | 'mcp' | 'instructions' | 'hooks' 
 
 /** A fully parsed and validated CLI invocation. */
 export type Invocation = {
-  command: 'sync' | 'doctor' | 'list' | 'show' | 'new' | 'remove' | 'get' | 'set' | 'import';
+  command:
+    'sync' | 'doctor' | 'list' | 'show' | 'new' | 'remove' | 'get' | 'set' | 'import' | 'mcp';
   dryRun: boolean;
   prune: boolean;
   force: boolean;
@@ -35,32 +37,12 @@ export type Invocation = {
   value?: string;
 };
 
-export const USAGE = `Usage:
-  skillset [sync] [--dry-run] [--prune] [--force] [--scope user|project] [--target claude|codex] [--kind <kind>] [--json]
-  skillset doctor [--targets] [--scope user|project] [--json]
-  skillset list [--json]
-  skillset show <name> [--target claude|codex] [--json]
-  skillset new <skill|agent> <name>
-  skillset remove <skill|agent> <name>
-  skillset get <skill|agent> <name> [<field-path>] [--json]
-  skillset set <skill|agent> <name> <field-path> <value>
-  skillset import <skill|agent|instructions> [name] [--from claude|codex] [--scope user|project]
-
-Compiles the skills, agents, MCP servers, instructions, hooks, and defaults
-in the current directory (or $SKILLSET_DIRECTORY) into Claude Code's and
-Codex's formats.
-
-Options:
-  --dry-run   Print the sync plan without touching disk.
-  --prune     Remove previously generated outputs that no longer exist in source.
-  --force     Overwrite targets that skillset did not generate or that drifted.
-  --scope     Write into the home directory (user, default) or this repo (project).
-  --target    Limit to one tool.
-  --kind      Limit sync to one source kind (skills|agents|mcp|instructions|hooks|defaults).
-  --targets   With doctor: check managed outputs for drift instead of sources.
-  --from      With import: which tool to read from (default claude).
-  --json      Machine-readable output.
-  -h, --help  Show this help.`;
+/** The non-Invocation outcome of parsing: a usage error or a help request. */
+export type UsageOutcome = {
+  usageError: string;
+  /** Present when a specific command's help was requested. */
+  helpText?: string;
+};
 
 const COMMANDS = [
   'sync',
@@ -72,13 +54,14 @@ const COMMANDS = [
   'get',
   'set',
   'import',
+  'mcp',
 ] as const;
 
 function isCommand(value: string): value is Invocation['command'] {
   return (COMMANDS as readonly string[]).includes(value);
 }
 
-function usageError(message: string): { usageError: string } {
+function usageError(message: string): UsageOutcome {
   return { usageError: message };
 }
 
@@ -287,8 +270,8 @@ function buildInvocation(
   return invocation;
 }
 
-/** Parse and validate argv into an {@link Invocation} or a usage error. */
-export function parseInvocation(argv: string[]): Invocation | { usageError: string } {
+/** Parse and validate argv into an {@link Invocation} or a usage/help outcome. */
+export function parseInvocation(argv: string[]): Invocation | UsageOutcome {
   let parsed: ReturnType<typeof parseSkillsetArguments>;
   try {
     parsed = parseSkillsetArguments(argv);
@@ -297,7 +280,11 @@ export function parseInvocation(argv: string[]): Invocation | { usageError: stri
   }
 
   const { values, positionals } = parsed;
-  if (values.help) return usageError('');
+  if (values.help) {
+    const helpText = positionals[0] === undefined ? undefined : commandHelp(positionals[0]);
+
+    return helpText === undefined ? usageError('') : { usageError: '', helpText };
+  }
 
   const command = positionals[0] ?? 'sync';
   if (!isCommand(command)) return usageError(`unknown command \`${command}\``);

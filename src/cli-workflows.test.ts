@@ -131,15 +131,24 @@ describe('sync', () => {
     expect(output).toContain('re-trust the hooks via /hooks');
   });
 
-  it('supports --json sync output and writes nothing on --dry-run', async () => {
+  it('supports --json sync output, including embedded actions, and writes nothing on --dry-run', async () => {
     const fixture = await makeFixture();
     await addSkill(fixture, 'demo', validSkill);
+    await writeFile(
+      join(fixture.root, 'mcp-servers.yaml'),
+      'servers:\n  neon:\n    url: https://n\n',
+    );
 
     expect(await runCli(['sync', '--dry-run', '--json'], fixture.dependencies)).toBe(0);
     const parsed = JSON.parse(fixture.lines.join('\n'));
     expect(parsed.dryRun).toBe(true);
     expect(parsed.scope).toBe('user');
-    expect(parsed.actions[0]).toMatchObject({ kind: 'skill', name: 'demo', action: 'write' });
+    expect(parsed.actions).toContainEqual(
+      expect.objectContaining({ kind: 'skill', name: 'demo', action: 'write' }),
+    );
+    expect(parsed.actions).toContainEqual(
+      expect.objectContaining({ kind: 'mcp-server', name: 'neon', action: 'write' }),
+    );
     expect(await exists(join(fixture.home, '.claude', 'skills'))).toBe(false);
   });
 

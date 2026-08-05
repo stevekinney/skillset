@@ -50,8 +50,10 @@ bun run package:check    # Run publint + @arethetypeswrong/cli on packed tarball
 ### Module Layout (`src/`)
 
 - `bin.ts` — executable entry (`skillset` bin); delegates to `cli.ts`.
-- `cli.ts` — command dispatch; all IO is injected via `CliDependencies` (cwd, env, homeDirectory, log) so tests run in temp dirs.
-- `invocation.ts` — `node:util` `parseArgs` argument parsing and usage text.
+- `cli.ts` — command dispatch; all IO is injected via `CliDependencies` (cwd, env, homeDirectory, log, optional mcpTransport) so tests run in temp dirs without touching real stdio.
+- `invocation.ts` — `node:util` `parseArgs` argument parsing; per-command `--help` text lives in `help.ts`.
+- `help.ts` — comprehensive per-command help text (`commandHelp(name)`) plus the top-level `USAGE`.
+- `mcp-server.ts` — exposes every CLI operation as an MCP tool (`createMcpServer`) served over stdio (`runMcpServer`); tool results reuse the same JSON shapes as `--json` CLI output.
 - `analysis.ts` — discovers + doctor-checks every source kind into one `Analysis`.
 - `commands.ts` — `list`/`show`/`new`/`remove`/`get`/`set` CRUD over sources.
 - `commands-run.ts` — `sync`, `doctor --targets`, and `import` orchestration.

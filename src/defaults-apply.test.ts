@@ -57,6 +57,15 @@ describe('planDefaultsApply', () => {
     expect(byName.get('codex:model')).toBe('write');
   });
 
+  it('refuses a codex config that is not valid TOML', async () => {
+    const files = await makeFiles();
+    await writeFile(files.codex, '[broken');
+
+    expect(
+      planDefaultsApply(source, files, freshLedger(), { ...options, targets: ['codex'] }),
+    ).rejects.toThrow('not valid TOML');
+  });
+
   it('detects drift on managed keys and honors force', async () => {
     const files = await makeFiles();
     const ledger = freshLedger();

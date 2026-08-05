@@ -12,6 +12,7 @@ import { hashContent, type Ledger } from './ledger.js';
 import {
   agentFileName,
   executeSync,
+  hasDrifted,
   planSync,
   type CompilableSources,
   type SyncOptions,
@@ -76,6 +77,26 @@ describe('agentFileName', () => {
   it('is .md for Claude and .toml for Codex', () => {
     expect(agentFileName('reviewer', 'claude')).toBe('reviewer.md');
     expect(agentFileName('reviewer', 'codex')).toBe('reviewer.toml');
+  });
+});
+
+describe('hasDrifted', () => {
+  it('is false when there is nothing recorded or every recorded file matches', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'skillset-drifted-'));
+    temporaryDirectories.push(root);
+    await writeFile(join(root, 'SKILL.md'), 'contents');
+
+    expect(await hasDrifted(root, undefined)).toBe(false);
+    expect(await hasDrifted(root, { files: { 'SKILL.md': hashContent('contents') } })).toBe(false);
+  });
+
+  it('is true when a recorded file is missing or changed', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'skillset-drifted-'));
+    temporaryDirectories.push(root);
+    await writeFile(join(root, 'SKILL.md'), 'edited');
+
+    expect(await hasDrifted(root, { files: { 'SKILL.md': hashContent('original') } })).toBe(true);
+    expect(await hasDrifted(root, { files: { 'MISSING.md': hashContent('x') } })).toBe(true);
   });
 });
 

@@ -19,10 +19,15 @@ exports (`analyzeSources`, `planSync`/`executeSync`, the `*-apply` modules,
 repository only makes sense if the UI's release cadence diverges hard from the
 CLI's; starting split guarantees schema drift for no benefit.
 
-The serving layer should be a thin `skillset serve` command (not yet built):
-`Bun.serve` in `scripts/` or a dedicated entry, exposing the JSON contracts
-below over HTTP for the local UI. No remote deployment story is needed — this
-is a localhost tool operating on the user's own config files.
+**Update:** `skillset mcp` now exists (`src/mcp-server.ts`), exposing every
+operation as an MCP tool over stdio for _agents_. It is not the UI's serving
+layer — MCP's stdio/JSON-RPC transport isn't what a browser speaks — but it's
+proof the JSON contracts already generalize cleanly to a second consumer.
+The UI still needs a `skillset serve` command (not yet built): `Bun.serve`
+exposing the same operations over HTTP for a local Svelte app. No remote
+deployment story is needed — this is a localhost tool operating on the user's
+own config files. `mcp-server.ts`'s tool handlers are the template for the
+HTTP route handlers — same guard/analyze/dispatch shape, different transport.
 
 ## The three data layers (all implemented)
 

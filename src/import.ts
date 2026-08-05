@@ -30,10 +30,13 @@ function stripMarker(contents: string): string {
 }
 
 async function exists(path: string): Promise<boolean> {
-  return access(path).then(
-    () => true,
-    () => false,
-  );
+  try {
+    await access(path);
+
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function refuseExisting(path: string): Promise<void> {

@@ -129,6 +129,40 @@ function analyzeDefaults(analysis: Analysis): void {
   }
 }
 
+/**
+ * The per-source-file issue groups for reporting, keyed by display name;
+ * absent files are omitted (unless they produced issues).
+ */
+export function analysisIssueFiles(analysis: Analysis): Record<string, Issue[]> {
+  const files: Record<string, Issue[]> = {};
+
+  if (analysis.sources.mcp || analysis.mcpIssues.length > 0) {
+    files['mcp-servers.yaml'] = analysis.mcpIssues;
+  }
+  if (analysis.sources.instructions) files['instructions.md'] = analysis.instructionsIssues;
+  if (analysis.sources.hooks || analysis.hooksIssues.length > 0) {
+    files['hooks.yaml'] = analysis.hooksIssues;
+  }
+  if (analysis.sources.defaults || analysis.defaultsIssues.length > 0) {
+    files['defaults.yaml'] = analysis.defaultsIssues;
+  }
+
+  return files;
+}
+
+/** The doctor report as a stable JSON-friendly structure. */
+export function analysisReport(analysis: Analysis): {
+  skills: { name: string; issues: Issue[] }[];
+  agents: { name: string; issues: Issue[] }[];
+  files: Record<string, Issue[]>;
+} {
+  return {
+    skills: analysis.skillReports.map(({ name, issues }) => ({ name, issues })),
+    agents: analysis.agentReports.map(({ name, issues }) => ({ name, issues })),
+    files: analysisIssueFiles(analysis),
+  };
+}
+
 function issueGroups(analysis: Analysis): Issue[][] {
   return [
     ...analysis.skillReports.map((report) => report.issues),

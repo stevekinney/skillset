@@ -1,8 +1,14 @@
 import { homedir } from 'node:os';
 
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import chalk from 'chalk';
 
-import { analysisHasErrors, analyzeSources, type Analysis } from './analysis.js';
+import {
+  analysisHasErrors,
+  analysisIssueFiles,
+  analyzeSources,
+  type Analysis,
+} from './analysis.js';
 import { runDoctorTargets, runImport, runSync, type RunContext } from './commands-run.js';
 import {
   getField,
@@ -15,9 +21,10 @@ import {
   type SourceKind,
 } from './commands.js';
 import { resolveSourceRoot } from './discover.js';
-import type { Issue } from './doctor.js';
 import { parseEnvironment } from './environment.js';
-import { parseInvocation, USAGE, type Invocation } from './invocation.js';
+import { USAGE } from './help.js';
+import { parseInvocation, type Invocation } from './invocation.js';
+import { runMcpServer } from './mcp-server.js';
 import { renderDoctor } from './render.js';
 
 /**
@@ -29,6 +36,8 @@ export type CliDependencies = {
   env: Record<string, string | undefined>;
   homeDirectory: string;
   log: (line: string) => void;
+  /** The transport `skillset mcp` serves on. Defaults to stdio. */
+  mcpTransport?: Transport;
 };
 
 /** The runtime defaults: real cwd, env, home directory, and stdout. */
@@ -56,29 +65,12 @@ function runContext(dependencies: CliDependencies): RunContext {
   };
 }
 
-function sourceFileIssues(analysis: Analysis): Record<string, Issue[]> {
-  const files: Record<string, Issue[]> = {};
-
-  if (analysis.sources.mcp || analysis.mcpIssues.length > 0) {
-    files['mcp-servers.yaml'] = analysis.mcpIssues;
-  }
-  if (analysis.sources.instructions) files['instructions.md'] = analysis.instructionsIssues;
-  if (analysis.sources.hooks || analysis.hooksIssues.length > 0) {
-    files['hooks.yaml'] = analysis.hooksIssues;
-  }
-  if (analysis.sources.defaults || analysis.defaultsIssues.length > 0) {
-    files['defaults.yaml'] = analysis.defaultsIssues;
-  }
-
-  return files;
-}
-
 function renderAnalysis(analysis: Analysis, json: boolean, log: (line: string) => void): void {
   renderDoctor(
     {
       skillReports: analysis.skillReports,
       agentReports: analysis.agentReports,
-      files: sourceFileIssues(analysis),
+      files: analysisIssueFiles(analysis),
     },
     json,
     log,
@@ -180,6 +172,11 @@ export async function runCli(argv: string[], dependencies: CliDependencies): Pro
   const invocation = parseInvocation(argv);
 
   if ('usageError' in invocation) {
+    if (invocation.helpText !== undefined) {
+      dependencies.log(invocation.helpText);
+
+      return 0;
+    }
     if (invocation.usageError !== '') dependencies.log(chalk.red(invocation.usageError));
     dependencies.log(USAGE);
 
@@ -198,6 +195,9 @@ export async function runCli(argv: string[], dependencies: CliDependencies): Pro
 const DIRECT_COMMANDS = new Set(['new', 'remove', 'get', 'set']);
 
 async function dispatch(invocation: Invocation, dependencies: CliDependencies): Promise<number> {
+  if (invocation.command === 'mcp') {
+    return runMcpServer(dependencies, dependencies.mcpTransport);
+  }
   if (invocation.command === 'doctor' && invocation.checkTargets) {
     return runDoctorTargets(invocation, runContext(dependencies));
   }

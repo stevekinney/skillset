@@ -1,3 +1,5 @@
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
@@ -73,6 +75,29 @@ describe('argument handling', () => {
     expect(await runCli(['deploy'], fixture.dependencies)).toBe(1);
     expect(fixture.lines.join('\n')).toContain('unknown command `deploy`');
   });
+
+  it('prints comprehensive per-command help for every command', async () => {
+    const fixture = await makeFixture();
+
+    for (const command of [
+      'sync',
+      'doctor',
+      'list',
+      'show',
+      'new',
+      'remove',
+      'get',
+      'set',
+      'import',
+      'mcp',
+    ]) {
+      fixture.lines.length = 0;
+      expect(await runCli([command, '--help'], fixture.dependencies)).toBe(0);
+      const output = fixture.lines.join('\n');
+      expect(output).toContain(`skillset ${command}`);
+      expect(output).toContain('Usage:');
+    }
+  });
 });
 
 describe('doctor', () => {
@@ -116,6 +141,18 @@ describe('doctor', () => {
     expect(parsed.files['hooks.yaml'][0].message).toContain('invalid hooks.yaml');
   });
 
+  it('reports malformed mcp-servers.yaml and defaults.yaml as errors', async () => {
+    const fixture = await makeFixture();
+    await addSkill(fixture, 'demo', validSkill);
+    await writeFile(join(fixture.root, 'mcp-servers.yaml'), '- broken\n');
+    await writeFile(join(fixture.root, 'defaults.yaml'), '- broken\n');
+
+    expect(await runCli(['doctor', '--json'], fixture.dependencies)).toBe(1);
+    const parsed = JSON.parse(fixture.lines.join('\n'));
+    expect(parsed.files['mcp-servers.yaml'][0].message).toContain('invalid mcp-servers.yaml');
+    expect(parsed.files['defaults.yaml'][0].message).toContain('invalid defaults.yaml');
+  });
+
   it('exits 1 when no sources exist and honors SKILLSET_DIRECTORY', async () => {
     const fixture = await makeFixture();
     await rm(join(fixture.root, 'skills'), { recursive: true });
@@ -149,6 +186,10 @@ describe('crud commands', () => {
     fixture.lines.length = 0;
     expect(await runCli(['show', 'demo', '--target', 'codex'], fixture.dependencies)).toBe(0);
     expect(fixture.lines.join('\n')).toContain('── codex: demo/SKILL.md');
+
+    fixture.lines.length = 0;
+    expect(await runCli(['show', 'demo', '--json'], fixture.dependencies)).toBe(0);
+    expect(JSON.parse(fixture.lines.join('\n'))[0]).toMatchObject({ label: 'demo/SKILL.md' });
 
     fixture.lines.length = 0;
     expect(await runCli(['show', 'missing', '--json'], fixture.dependencies)).toBe(1);
@@ -230,5 +271,25 @@ describe('color support', () => {
   it('emits ANSI codes when FORCE_COLOR is set', async () => {
     const output = await runBin({ FORCE_COLOR: '3' });
     expect(output).toContain(`${ESCAPE}[`);
+  });
+});
+
+describe('mcp command', () => {
+  it('dispatches to the MCP server and serves tools over the injected transport', async () => {
+    const fixture = await makeFixture();
+    await addSkill(fixture, 'demo', validSkill);
+
+    const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
+    fixture.dependencies.mcpTransport = serverSide;
+
+    const served = runCli(['mcp'], fixture.dependencies);
+
+    const client = new Client({ name: 'test-client', version: '0.0.0' });
+    await client.connect(clientSide);
+    const { tools } = await client.listTools();
+    expect(tools.some((tool) => tool.name === 'list_sources')).toBe(true);
+
+    await clientSide.close();
+    expect(await served).toBe(0);
   });
 });

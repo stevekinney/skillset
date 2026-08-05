@@ -143,6 +143,44 @@ describe('executeHooksApply', () => {
     expect(item?.entry).toEqual(hookEntry(source.hooks['PreToolUse']![0]!, 'codex'));
   });
 
+  it('leaves sibling entries for the same event alone when only one changes', async () => {
+    const files = await makeFiles();
+    const twoOnSameEvent = parseHooksSource(
+      'hooks:\n  PreToolUse:\n    - matcher: Bash\n      command: ./a.sh\n    - matcher: Write\n      command: ./b.sh\n',
+    );
+    const ledger = freshLedger();
+    await executeHooksApply(
+      twoOnSameEvent,
+      await planHooksApply(twoOnSameEvent, files, ledger, { ...options, targets: ['claude'] }),
+      files,
+      ledger,
+      'user',
+      new Set(),
+    );
+
+    let settings = JSON.parse(await readFile(files.claude, 'utf8'));
+    expect(settings.hooks.PreToolUse).toHaveLength(2);
+
+    const updated = parseHooksSource(
+      'hooks:\n  PreToolUse:\n    - matcher: Bash\n      command: ./a-v2.sh\n    - matcher: Write\n      command: ./b.sh\n',
+    );
+    await executeHooksApply(
+      updated,
+      await planHooksApply(updated, files, ledger, { ...options, targets: ['claude'] }),
+      files,
+      ledger,
+      'user',
+      new Set(),
+    );
+
+    settings = JSON.parse(await readFile(files.claude, 'utf8'));
+    expect(settings.hooks.PreToolUse).toHaveLength(2);
+    const commands = settings.hooks.PreToolUse.map(
+      (entry: { hooks: { command: string }[] }) => entry.hooks[0]?.command,
+    );
+    expect(commands).toEqual(['./a-v2.sh', './b.sh']);
+  });
+
   it('replaces managed entries without duplicating and prunes cleanly', async () => {
     const files = await makeFiles();
     const ledger = freshLedger();

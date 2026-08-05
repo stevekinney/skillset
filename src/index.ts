@@ -56,10 +56,16 @@ export {
   type SkillFrontmatter,
   type Target,
 } from './frontmatter.js';
+export { commandHelp, USAGE } from './help.js';
 export { checkHooksSource, parseHooksSource, type HooksSource } from './hooks-config.js';
 export { importSource, type ImportKind, type ImportRequest } from './import.js';
 export { checkInstructions, emitInstructions } from './instructions.js';
-export { parseInvocation, USAGE, type Invocation, type KindFilter } from './invocation.js';
+export {
+  parseInvocation,
+  type Invocation,
+  type KindFilter,
+  type UsageOutcome,
+} from './invocation.js';
 export {
   readLedger,
   stableStringify,
@@ -76,6 +82,7 @@ export {
   type McpServer,
   type ParsedMcpSource,
 } from './mcp-config.js';
+export { createMcpServer, createStdioTransport, runMcpServer } from './mcp-server.js';
 export {
   executeSync,
   planSync,
