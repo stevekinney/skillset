@@ -1,6 +1,15 @@
 import { unlink } from 'node:fs/promises';
+import { join } from 'node:path';
 import { $ } from 'bun';
-import packageDefinition from '../package.json' with { type: 'json' };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+// Read at runtime rather than importing the JSON: the `bin` field is optional,
+// so a typed import would not compile in a package that has none.
+const definition: unknown = await Bun.file(join(import.meta.dir, '..', 'package.json')).json();
+const binaries = isRecord(definition) && isRecord(definition['bin']) ? definition['bin'] : {};
 
 // `attw --pack` shells out to a hardcoded `npm pack` internally. That is
 // unreliable when this script itself runs nested inside an active `npm
@@ -24,8 +33,9 @@ try {
   const contents = await $`tar -tzf ${filename}`.text();
   const entries = new Set(contents.split('\n').map((line) => line.trim()));
 
-  const bin = packageDefinition as { bin?: Record<string, string> };
-  for (const [binaryName, binaryPath] of Object.entries(bin.bin ?? {})) {
+  for (const [binaryName, binaryPath] of Object.entries(binaries)) {
+    if (typeof binaryPath !== 'string') continue;
+
     const packedPath = `package/${binaryPath.replace(/^\.\//, '')}`;
 
     if (!entries.has(packedPath)) {
