@@ -22,32 +22,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Node 24 (LTS) ships npm 11.17.0. Trusted publishing needs npm >= 11.5.1,
-      # and Node 22 ships 10.9.8 — which supports provenance but not OIDC
-      # registry auth. That combination fails in two confusing ways: with a
-      # token present it publishes anonymously and the registry answers the PUT
-      # with `404 ... or you do not have permission`; with no token it fails
-      # earlier with `ENEEDAUTH`. Provenance signs successfully either way,
-      # because sigstore uses the OIDC token directly and never touches
-      # registry auth, which makes both look like a trusted-publisher
-      # misconfiguration. npm's own recommended workflow pins Node 24.
-      # Deliberately no `registry-url`: passing it makes setup-node write an
-      # .npmrc with `_authToken=${NODE_AUTH_TOKEN}`, and with no token secret
-      # configured that expands to setup-node's literal placeholder. npm then
-      # authenticates with that bogus value instead of exchanging its OIDC
-      # token, and the registry rejects the PUT as an anonymous caller.
-      # Both halves matter and each alone still fails:
-      #   npm 10.9.8 + token    -> 404 (no OIDC support, publishes anonymously)
-      #   npm 10.9.8 + no token -> ENEEDAUTH (no OIDC support, nothing to use)
-      #   npm 11.16.0 + token   -> 404 (prefers the token over OIDC)
-      #   npm 11.16.0 + no token-> OIDC trusted publishing
-      # Provenance signs in every case, because sigstore uses the OIDC token
-      # directly and never touches registry auth — which is what makes all of
-      # these look like a trusted-publisher misconfiguration.
+      # setup-node writes the .npmrc (registry wiring) needed for OIDC trusted
+      # publishing with provenance — no hand-rolled .npmrc, no NPM_TOKEN.
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
-          node-version: '24'
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      # Node 22 ships npm 10.x; trusted publishing (OIDC) needs npm >= 11.5.1.
+      - name: Upgrade npm
+        run: npm install -g npm@^11.5.1
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -60,30 +45,26 @@ jobs:
       - name: Verify tag matches package.json version
         run: bun run scripts/verify-release-version.ts
 
-      - name: Lint
-        run: bun run lint
+      - name: Preflight publish checks
+        run: bun run preflight:publish
 
-      - name: Typecheck
-        run: bun run typecheck
+      # Runs the same gate `prepublishOnly` would, but up front, so a failure
+      # surfaces before the publish attempt rather than inside it. This also
+      # builds `dist/`, which the `--ignore-scripts` publish below relies on.
+      - name: Validate
+        run: bun run validate
 
-      - name: Test
-        run: bun test
-
-      - name: Build package
-        run: bun run build
-
-      - name: Check package exports and types
-        run: bun run package:check
-
+      # `--ignore-scripts` because `validate` already ran the full gate and the
+      # build. It also keeps the publish itself short: npm mints its OIDC token
+      # before running lifecycle scripts, so letting the whole gate run inside
+      # `npm publish` lets that token expire before the PUT — which the registry
+      # reports as `404 ... or you do not have permission`, indistinguishable
+      # from a misconfigured trusted publisher. It additionally avoids a nested
+      # `npm pack` (from attw, via prepublishOnly) inside the publish lifecycle.
       - name: Publish to npm
         env:
           NPM_CONFIG_PROVENANCE: 'true'
-        # The npm version is printed because every failure mode of trusted
-        # publishing looks like a permissions problem, and the version is the
-        # first thing worth ruling out.
-        run: |
-          npm --version
-          npm publish
+        run: npm publish --ignore-scripts
 
   build-binaries:
     runs-on: ubuntu-latest
