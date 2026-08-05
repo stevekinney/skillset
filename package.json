@@ -1,6 +1,6 @@
 {
   "name": "@lostgradient/skillset",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Compile one canonical set of agent skills, subagents, MCP servers, instructions, hooks, and model defaults into Claude Code and OpenAI Codex configuration.",
   "homepage": "https://github.com/stevekinney/skillset#readme",
   "bugs": "https://github.com/stevekinney/skillset/issues",
