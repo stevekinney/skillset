@@ -22,13 +22,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # setup-node writes the .npmrc (registry + NODE_AUTH_TOKEN wiring) needed
-      # for OIDC trusted publishing with provenance — no hand-rolled .npmrc.
+      # Deliberately no `registry-url`. Passing it makes setup-node write an
+      # .npmrc containing `_authToken=${NODE_AUTH_TOKEN}`, and with no token
+      # secret set that expands to setup-node's literal placeholder
+      # (XXXXX-XXXXX-XXXXX-XXXXX). npm finds a token, authenticates with the
+      # bogus value instead of exchanging its OIDC token, and the registry
+      # answers the PUT with `404 ... or you do not have permission` — after
+      # provenance has already signed successfully, because sigstore uses the
+      # OIDC token directly and does not care about registry auth.
+      # The tell is the absence of npm's "No NPM_TOKEN found, but OIDC is
+      # available - using npm trusted publishing" line in the publish log.
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
           node-version: '22'
-          registry-url: 'https://registry.npmjs.org'
 
       # Trusted publishing (OIDC) requires npm >= 11.5.1, newer than the npm
       # bundled with Node 22 (10.9.x). Without this the publish fails at the
