@@ -1,7 +1,13 @@
 {
   "name": "@lostgradient/skillset",
   "version": "0.0.1",
-  "description": "",
+  "description": "Compile one canonical set of agent skills, subagents, MCP servers, instructions, hooks, and model defaults into Claude Code and OpenAI Codex configuration.",
+  "homepage": "https://github.com/stevekinney/skillset#readme",
+  "bugs": "https://github.com/stevekinney/skillset/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stevekinney/skillset.git"
+  },
   "license": "MIT",
   "author": "Steve Kinney <hello@stevekinney.net>",
   "sideEffects": false,
@@ -35,10 +41,11 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "lint": "oxlint --type-aware --tsconfig ./tsconfig.json",
     "lint:fix": "oxlint --fix --type-aware --tsconfig ./tsconfig.json",
-    "package:check": "bun run scripts/check-package.ts",
     "prepack": "bun run build",
+    "package:check": "bun run scripts/check-package.ts",
+    "preflight:publish": "bun run scripts/preflight-publish.ts",
     "prepare": "bun x lefthook install",
-    "prepublishOnly": "bun run validate",
+    "prepublishOnly": "bun run preflight:publish && bun run validate",
     "start": "bun run src/index.ts",
     "test": "bun test",
     "test:coverage": "bun test --coverage",
@@ -72,5 +79,8 @@
   "engines": {
     "bun": ">=1.3.0",
     "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
