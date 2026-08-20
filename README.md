@@ -26,7 +26,7 @@ skillset new <skill|agent> <name>
 skillset remove <skill|agent> <name>
 skillset get <skill|agent> <name> [<field-path>] [--json]
 skillset set <skill|agent> <name> <field-path> <value>
-skillset import <skill|agent|instructions> [name] [--from claude|codex]
+skillset import <skill|agent|instructions> [name] [--from claude|codex] [--scope user|project]
 skillset mcp
 ```
 
@@ -36,6 +36,55 @@ skillset mcp
 - The CRUD commands exist so a coding agent can manage sources without hand-parsing directories: `list` for inventory + status, `show` for a compiled preview, `new`/`remove` for scaffolding and deletion, and `get`/`set` for frontmatter fields via dot paths. `set` values are parsed as YAML and the write is schema-validated first.
 - `mcp` serves every operation above as an [MCP](https://modelcontextprotocol.io) tool over stdio (`list_sources`, `run_doctor`, `check_targets`, `sync`, `show_source`, `new_source`, `remove_source`, `get_field`, `set_field`, `import_source`) — register it with `claude mcp add skillset -- skillset mcp` or `codex mcp add skillset -- skillset mcp` so an agent can manage its own configuration directly, with the same ownership/drift rules as the CLI.
 - Every command supports `--json` (stable shapes, documented in `documentation/ui-readiness.md`); text output respects `NO_COLOR` / `FORCE_COLOR` and disables color on non-TTY pipes. Run `skillset <command> --help` for the full reference on any command.
+
+## Library
+
+`@lostgradient/skillset` is also importable as a library — everything the CLI and the `mcp` server are built from is exported from the package root (`src/index.ts`), dual-published for Node and Bun (`dist/node/index.js`, `dist/bun/index.js`) with shared types (`dist/index.d.ts`):
+
+```typescript
+import { runCli, defaultDependencies } from '@lostgradient/skillset';
+
+const code = await runCli(process.argv.slice(2), defaultDependencies());
+```
+
+`runCli(argv, dependencies)` is the whole CLI as a function — `defaultDependencies()` wires it to the real process (`cwd`, `env`, `homeDirectory`, stdout `log`, plus an optional `mcpTransport` for the `mcp` command); tests and embedding tools pass their own `CliDependencies` to run against a temp directory instead. Everything below is the same machinery `runCli` composes, exposed individually so a caller can drive one step — discover sources, validate them, plan or run a sync, read the ledger — without shelling out.
+
+Discovery and validation:
+
+- `resolveSourceRoot(directory, cwd)` and `discoverSources(root)` (plus the per-kind `discoverSkills`/`discoverAgents`) find and parse a source tree into `Sources`.
+- `analyzeSources(directory, cwd)` runs discovery and doctor together and returns an `Analysis`; `analysisHasErrors(analysis)` reports whether sync should be blocked.
+- `checkSkill(s)`/`checkAgent(s)`/`checkInstructions`/`checkMcpSource`/`checkHooksSource`/`checkDefaultsSource` are the individual doctor rules behind `analyzeSources`, each returning `Issue[]`; `hasErrors(reports)` reduces a batch to a boolean.
+
+Compiling one source in memory (no writes — this is what `skillset show` calls):
+
+- `emitSkill(parsed, target)` and `emitClaudeAgent`/`emitCodexAgent(parsed)` compile a parsed skill or agent into its per-target output.
+- `emitInstructions(raw, target)` and `renderConditionals(body, target)` apply the `#if claude`/`#if codex` template directives.
+- `parseSkillFile`/`parseAgentFile` parse frontmatter + body into `ParsedSkillFile`/`ParsedAgentFile`; `skillFrontmatterSchema`/`agentFrontmatterSchema` are the underlying Zod schemas; `splitFrontmatter` separates the YAML block from the body.
+- `parseMcpSource`/`claudeMcpEntry`/`codexMcpSection` and `parseHooksSource`/`parseDefaultsSource` parse and project `mcp-servers.yaml`/`hooks.yaml`/`defaults.yaml` the same way.
+
+Running or previewing a sync:
+
+- `runSync(invocation, analysis, context)`, `runDoctorTargets(invocation, context)`, and `runImport(invocation, context)` are the same orchestration `skillset sync`/`doctor --targets`/`import` run, taking a `RunContext` (`{ homeDirectory, cwd, log }`) instead of stdio; `parseInvocation(argv)` builds the `Invocation` they expect from argv, or returns a `UsageOutcome` on a bad flag.
+- `planSync`/`executeSync` are the two-phase primitives underneath `runSync`: `planSync` computes the `SyncAction[]` (including unmanaged/drift skips) without touching disk, `executeSync` applies a plan.
+- `itemStatus(key, item)` classifies one ledger entry as `clean`/`drift`/`missing`; `readLedger`/`writeLedger` load and persist `~/.config/skillset/state.json`; `stableStringify`/`structurallyEqual` are the hash/diff helpers the ledger uses to detect drift.
+- `resolveTargets(scope, home, cwd)` resolves every per-tool, per-scope destination path plus the ledger path into a `Targets`.
+- `importSource(request)` reverse-compiles an installed skill/agent/instructions file into a source, per `ImportRequest`/`ImportKind`.
+- `spliceTomlSection`/`spliceTomlScalar` do the comment-preserving TOML edits used against `~/.codex/config.toml`.
+
+CRUD and inventory (what `list`/`show`/`new`/`remove`/`get`/`set` call):
+
+- `listEntries(sources)`, `showSource(sources, name, targets)`, `newSource(root, kind, name)`, `removeSource(root, kind, name)`, `getField(root, kind, name, path?)`, and `setField(root, kind, name, path, value)`.
+
+Serving as MCP:
+
+- `createMcpServer(dependencies)` builds the `McpServer` instance `skillset mcp` runs (the same ten tools listed above); `runMcpServer(dependencies, transport?)` connects it and blocks until the transport closes; `createStdioTransport()` is the default stdio transport, overridable for embedding in another host.
+
+Configuration and help text:
+
+- `environment` is the resolved configuration (`NODE_ENV`, `SKILLSET_DIRECTORY`) read once at module load through `@lostgradient/environmentalist`; `parseEnvironment(source?)` validates an arbitrary record against the same schema without the dotenv/config-file chain, for tests.
+- `commandHelp(command)` and `USAGE` are the help text `-h`/`--help` prints.
+
+Every exported type (`SourceKind`, `Target`, `Scope`, `Invocation`, `Analysis`, `Ledger`, `LedgerItem`, `SyncAction`, `SyncOptions`, `CompilableSkill`/`CompilableAgent`/`CompilableSources`, `SourceSkill`/`SourceAgent`/`SourceFile`/`Sources`, `SkillFrontmatter`/`AgentFrontmatter`, `ParsedSkillFile`/`ParsedAgentFile`, `McpServer`/`ParsedMcpSource`, `HooksSource`, `DefaultsSource`, `Environment`, `ListEntry`/`ShowFile`, `TargetStatus`, `KindFilter`, `UsageOutcome`, `RenderResult`/`TemplateError`, `EmittedFile`, `Targets`/`ToolTargets`, `EmbeddedAction`) ships alongside its function — see `src/index.ts` for the complete, current export list.
 
 ## Skills (`./skills/<name>/SKILL.md`)
 
