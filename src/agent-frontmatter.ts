@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { claudeEffortSchema, splitFrontmatter } from './frontmatter.js';
 import { claudeHookSettingsSchema } from './hook-schema.js';
+import { claudeAgentMcpServerSchema, codexMcpServerSchema } from './mcp-schema.js';
 
 const stringOrStringList = z.union([z.string(), z.array(z.string())]);
 
@@ -43,7 +44,7 @@ const codexAgentSchema = z.object({
   // documents these on its subagent TOML; their schemas differ from Claude's
   // same-named frontmatter fields, so there is no automatic translation.
   hooks: z.record(z.string(), z.unknown()).optional(),
-  mcp_servers: z.record(z.string(), z.unknown()).optional(),
+  mcp_servers: z.record(z.string(), codexMcpServerSchema).optional(),
   skills: z.record(z.string(), z.unknown()).optional(),
   tools: z.record(z.string(), z.unknown()).optional(),
 });
@@ -67,7 +68,7 @@ export const agentFrontmatterSchema = z.object({
     .optional(),
   maxTurns: z.number().int().positive().optional(),
   skills: z.array(z.string()).optional(),
-  mcpServers: z.array(z.unknown()).optional(),
+  mcpServers: z.array(claudeAgentMcpServerSchema).optional(),
   hooks: claudeHookSettingsSchema.optional(),
   memory: z.enum(['user', 'project', 'local']).optional(),
   background: claudeAgentBoolean.optional(),

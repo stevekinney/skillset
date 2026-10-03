@@ -192,6 +192,29 @@ describe('checkAgent', () => {
     expect(report.join('\n')).toContain('`tools` is folded into the Codex developer instructions');
   });
 
+  it('warns about inline mcpServers keys, unknown fields, and dropped codex.mcp_servers', () => {
+    const report = agentMessages(
+      agent(
+        '---\nname: reviewer\ndescription: ok\nmcpServers:\n  - a:\n      command: x\n    b:\n      command: y\n  - c:\n      type: http\n      url: https://x\n      mystery: 1\n  - plain\ncodex:\n  mcp_servers:\n    docs:\n      url: https://x\n      experimental_environment: remote\n---\nx',
+      ),
+    ).join('\n');
+    expect(report).toContain('mcpServers[0] has 2 keys');
+    expect(report).toContain('mcpServers[1] server `c` has unknown field `mystery`');
+    expect(report).toContain('codex.mcp_servers.docs has unknown field `experimental_environment`');
+    expect(report).toContain('Codex 0.160 renamed it to `environment_id`');
+    expect(report).toContain('`codex.mcp_servers` is validated but not applied');
+  });
+
+  it('reports invalid inline mcpServers entries as frontmatter errors', () => {
+    expect(
+      agentMessages(
+        agent(
+          '---\nname: reviewer\ndescription: ok\nmcpServers:\n  - a:\n      type: http\n---\nx',
+        ),
+      ).join('\n'),
+    ).toContain('error: invalid frontmatter');
+  });
+
   it('does not warn when the codex counterpart is set explicitly', () => {
     const report = agentMessages(
       agent(

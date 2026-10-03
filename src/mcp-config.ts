@@ -2,6 +2,16 @@ import { parse } from 'yaml';
 import { z } from 'zod';
 
 import type { Issue } from './doctor.js';
+import {
+  claudeMcpEntryProblems,
+  claudeMcpOverrideSchema,
+  codexMcpFieldsSchema,
+  codexMcpProblems,
+  codexUnknownFieldHint,
+  unknownClaudeMcpFields,
+  unknownCodexMcpFields,
+  type McpProblem,
+} from './mcp-schema.js';
 
 const serverSchema = z.object({
   transport: z.enum(['stdio', 'http']).optional(),
@@ -13,9 +23,9 @@ const serverSchema = z.object({
   /** Claude's per-server tool-call timeout, in milliseconds. */
   timeout: z.number().int().positive().optional(),
   /** Extra fields merged verbatim into the Claude entry (e.g. oauth). */
-  claude: z.record(z.string(), z.unknown()).optional(),
+  claude: claudeMcpOverrideSchema.optional(),
   /** Extra fields merged verbatim into the Codex section; always win. */
-  codex: z.record(z.string(), z.unknown()).optional(),
+  codex: codexMcpFieldsSchema.optional(),
 });
 
 /** The mcp-servers.yaml source schema. */
@@ -78,9 +88,12 @@ export function resolveTransport(server: McpServer): 'stdio' | 'http' | undefine
   return undefined;
 }
 
+/** Claude ignores per-server timeouts below this many milliseconds. */
+const MINIMUM_CLAUDE_TIMEOUT = 1000;
+
 const FALLBACK_SYNTAX_PATTERN = /\$\{[A-Z_][A-Z0-9_]*:-[^}]*\}/;
 
-function checkServer(name: string, server: McpServer): Issue[] {
+function checkTransport(name: string, server: McpServer): Issue[] {
   const issues: Issue[] = [];
   const transport = resolveTransport(server);
 
@@ -110,6 +123,68 @@ function checkServer(name: string, server: McpServer): Issue[] {
     issues.push({
       severity: 'warning',
       message: `server \`${name}\` uses \`\${VAR:-default}\` fallback syntax — Claude expands it, Codex cannot`,
+    });
+  }
+
+  return issues;
+}
+
+function checkTimeout(name: string, server: McpServer): Issue[] {
+  if (server.timeout === undefined || server.timeout >= MINIMUM_CLAUDE_TIMEOUT) return [];
+
+  return [
+    {
+      severity: 'warning',
+      message: `server \`${name}\` sets a timeout under ${MINIMUM_CLAUDE_TIMEOUT} ms — Claude ignores it (the value is in milliseconds)`,
+    },
+  ];
+}
+
+function checkServer(name: string, server: McpServer): Issue[] {
+  return [
+    ...checkTransport(name, server),
+    ...checkTimeout(name, server),
+    ...(resolveTransport(server) ? checkMergedEntries(name, server) : []),
+  ];
+}
+
+function describeProblem(problem: McpProblem): string {
+  const location = problem.path.join('.');
+
+  return location ? `\`${location}\`: ${problem.message}` : problem.message;
+}
+
+// The merged per-target entries are validated as the tools will read them, so
+// a typo or wrong type in a `claude:` or `codex:` block surfaces here.
+function checkMergedEntries(name: string, server: McpServer): Issue[] {
+  const issues: Issue[] = [];
+  const claudeEntry = claudeMcpEntry(server);
+  const codexSection = codexMcpSection(server);
+
+  for (const problem of claudeMcpEntryProblems(claudeEntry)) {
+    issues.push({
+      severity: 'error',
+      message: `server \`${name}\` Claude entry: ${describeProblem(problem)}`,
+    });
+  }
+  for (const field of unknownClaudeMcpFields(claudeEntry)) {
+    issues.push({
+      severity: 'warning',
+      message: `server \`${name}\` Claude entry has unknown field \`${field}\` — Claude Code ignores it for this transport`,
+    });
+  }
+
+  for (const problem of codexMcpProblems(codexSection)) {
+    issues.push({
+      severity: 'error',
+      message: `server \`${name}\` Codex section: ${describeProblem(problem)}`,
+    });
+  }
+  for (const field of unknownCodexMcpFields(codexSection)) {
+    const hint = codexUnknownFieldHint(field);
+    issues.push({
+      severity: 'warning',
+      message: `server \`${name}\` Codex section has unknown field \`${field}\` — Codex ignores it${hint ? `; ${hint}` : ''}`,
     });
   }
 

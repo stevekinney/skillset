@@ -92,6 +92,27 @@ present, enforced since ~v2.1.202), `command`, `args`, `env`, `url`,
 `oauth` (`clientId`, `callbackPort`, `authServerMetadataUrl`, `scopes`).
 `${VAR}` and `${VAR:-default}` expansion. No per-entry `tools` filter key.
 
+Re-verified 2026-10-03 against Claude Code 2.1.288 (binary Zod schemas and
+code.claude.com/docs/en/mcp, sub-agents, settings, model-config). Per
+transport: `stdio` needs `command` (min length 1; `type` optional; `args`,
+`env`, `timeout`, `alwaysLoad`, `bareElicitationCapability`); `sse` and
+`http` (alias `streamable-http`) need `type` and `url` and also take
+`headers`, `headersHelper`, `oauth`, `timeout`, `tools`, `alwaysLoad`,
+`bareElicitationCapability`, `discoveryCache`, `toolPermissions`; `ws` needs
+`type` and `url`, takes no `oauth`. `oauth`: `clientId`, `callbackPort`
+(positive int), `authServerMetadataUrl` (https only), `scopes` (ONE
+space-separated string), `xaa`. Loader: `url` without `type` is skipped;
+`sdk`, `sse-ide`, `ws-ide` skipped from files; expansion covers `command`,
+`args`, `env` values, `url`, `headers` values, not `headersHelper`. Per-server
+`timeout` below 1000 ms is ignored. Unknown-key strip-vs-reject is UNVERIFIED
+(inferred strip), so unknown fields are doctor warnings, never errors.
+Subagent `mcpServers` items: a string, or a record of server name to full
+inline entry; exactly one key is enforced at load (invalid item dropped with a
+warning), not in the schema. settings.json `effortLevel` accepts exactly
+`low|medium|high|xhigh` (invalid value silently unset; `max`, integers,
+`ultracode` rejected) — a different enum from skill/subagent frontmatter
+`effort` (`low|medium|high|xhigh|max` or integer).
+
 **Hooks** (re-verified 2026-10-03 against Claude Code 2.1.288 — docs
 lifecycle table, binary strings, CHANGELOG): 33 events — the 11 shared with
 Codex plus `Setup`, `UserPromptExpansion`, `StopFailure`, `PostToolBatch`,
@@ -168,6 +189,23 @@ global config forms, NOT Claude's same-named frontmatter). Global `[agents]`:
 `default_tools_approval_mode` (auto|prompt|writes|approve), per-tool
 `[mcp_servers.<name>.tools.<tool>] approval_mode`, `oauth_resource`,
 `experimental_environment`. `codex mcp add|list|get|remove|login|logout`.
+
+Re-verified 2026-10-03 against codex-cli 0.160.0 (config.schema.json,
+mcp_types.rs at rust-v0.160.0). `command` selects stdio, `url` selects
+streamable HTTP, and cross-transport fields error: stdio rejects `url`,
+`bearer_token_env_var`, `http_headers`, `env_http_headers`,
+`http_headers_helper`, `oauth`, `oauth_resource`, `auth`; HTTP rejects `args`,
+`env`, `env_vars`, `cwd`; `bearer_token` is always rejected. 0.160 has NO
+`experimental_environment` — the field is `environment_id` (docs are stale;
+the runtime silently ignores unknown keys, the published JSON schema flags
+them). New since 0.147: `startup_readiness` (connection|catalog),
+`tool_input_schema_max_bytes`, `http_headers_helper`,
+`tools.<t>.output_token_limit`, `oauth.{client_secret,callback_url,callback_port,authorization_server_issuer}`;
+also `environment_id`, `omit_tools_from` (code_mode|deferred|direct),
+`supports_parallel_tool_calls`, `scopes`, `startup_timeout_ms`, `auth`
+(oauth|chatgpt|ema_auth), `env_vars` entries as a name or `{name, source}`.
+Agent role files: `mcp_servers` is validated then DROPPED by role.rs, so
+`codex.mcp_servers` in an agent has no runtime effect in 0.160.
 
 **Other config.toml surface** a compiler should know: `model*` keys,
 `approval_policy` (untrusted|on-request|never), `sandbox_mode`,

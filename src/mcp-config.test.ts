@@ -16,6 +16,9 @@ const raw = `servers:
       X-Env: '\${SOME_VAR}'
       X-Static: 'plain'
     timeout: 600000
+    claude:
+      oauth:
+        callbackPort: 8080
   local:
     command: npx
     args: ['-y', 'some-mcp']
@@ -25,8 +28,7 @@ const raw = `servers:
     codex:
       startup_timeout_sec: 120
     claude:
-      oauth:
-        callbackPort: 8080
+      alwaysLoad: true
 `;
 
 describe('parseMcpSource', () => {
@@ -89,6 +91,70 @@ describe('checkMcpSource', () => {
   });
 });
 
+describe('checkMcpSource merged entries', () => {
+  it('rejects wrongly typed override blocks at parse time', () => {
+    expect(() =>
+      parseMcpSource('servers:\n  a:\n    command: x\n    claude:\n      timeout: soon\n'),
+    ).toThrow();
+    expect(() =>
+      parseMcpSource('servers:\n  a:\n    command: x\n    codex:\n      required: nope\n'),
+    ).toThrow();
+  });
+
+  it('errors when the merged Claude entry is invalid for its transport', () => {
+    expect(() =>
+      parseMcpSource('servers:\n  a:\n    command: x\n    claude:\n      command: ""\n'),
+    ).toThrow();
+    expect(() =>
+      parseMcpSource(
+        'servers:\n  a:\n    url: https://x\n    claude:\n      oauth:\n        authServerMetadataUrl: http://insecure.example\n',
+      ),
+    ).toThrow('authServerMetadataUrl must use https://');
+    expect(
+      messages('servers:\n  a:\n    command: x\n    claude:\n      type: http\n').join('\n'),
+    ).toContain('`url`');
+  });
+
+  it('warns about fields the chosen transport ignores', () => {
+    expect(
+      messages(
+        'servers:\n  a:\n    url: https://x\n    claude:\n      args: [a]\n      mystery: 1\n',
+      ).join('\n'),
+    ).toContain('warning: server `a` Claude entry has unknown field `mystery`');
+    expect(
+      messages(
+        'servers:\n  a:\n    command: x\n    codex:\n      experimental_environment: remote\n',
+      ).join('\n'),
+    ).toContain(
+      'unknown field `experimental_environment` — Codex ignores it; Codex 0.160 renamed it to `environment_id`',
+    );
+    expect(
+      messages('servers:\n  a:\n    command: x\n    codex:\n      mystery: 1\n').join('\n'),
+    ).toContain('unknown field `mystery` — Codex ignores it\n'.trim());
+  });
+
+  it('errors on invalid Codex sections', () => {
+    expect(
+      messages(
+        'servers:\n  a:\n    command: x\n    codex:\n      auth: oauth\n      bearer_token: t\n',
+      ).join('\n'),
+    ).toContain('error: server `a` Codex section: `auth`: not supported for a stdio server');
+    expect(
+      messages('servers:\n  a:\n    url: https://x\n    codex:\n      args: [a]\n').join('\n'),
+    ).toContain('error: server `a` Codex section: `args`');
+  });
+
+  it('warns about timeouts Claude ignores', () => {
+    expect(messages('servers:\n  a:\n    command: x\n    timeout: 30\n').join('\n')).toContain(
+      'warning: server `a` sets a timeout under 1000 ms',
+    );
+  });
+
+  it('skips merged validation when no transport resolves', () => {
+    expect(messages('servers:\n  a:\n    timeout: 5000\n')).toHaveLength(1);
+  });
+});
+
 describe('claudeMcpEntry', () => {
   it('builds http entries with headers and timeout', () => {
     const entry = claudeMcpEntry(parseMcpSource(raw).source.servers['neon']!);
@@ -101,6 +167,7 @@ describe('claudeMcpEntry', () => {
         'X-Static': 'plain',
       },
       timeout: 600000,
+      oauth: { callbackPort: 8080 },
     });
   });
 
@@ -109,7 +176,7 @@ describe('claudeMcpEntry', () => {
     expect(entry['type']).toBe('stdio');
     expect(entry['command']).toBe('npx');
     expect(entry['env']).toEqual({ LITERAL: 'value', FORWARDED: '${HOME_TOKEN}' });
-    expect(entry['oauth']).toEqual({ callbackPort: 8080 });
+    expect(entry['alwaysLoad']).toBe(true);
   });
 });
 

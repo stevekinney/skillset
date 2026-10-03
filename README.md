@@ -134,6 +134,8 @@ codex: # Codex models are a different family, so they're explicit
 
 Claude gets the file nearly verbatim at `~/.claude/agents/<name>.md` (supported fields: `tools`, `disallowedTools`, `model`, `permissionMode`, `maxTurns`, `skills`, `mcpServers`, `hooks`, `memory`, `background`, `effort`, `isolation` (`worktree` or `remote`), `color`, `initialPrompt`, `omitClaudeMd`, `experimental.cacheTtl`, and the undocumented `observer`, `observerMessage`, and `observeSubagents`). Codex gets `~/.codex/agents/<name>.toml` with the body as `developer_instructions` (Codex fallbacks applied), `tools`/`disallowedTools` folded in as a "Tool guidance" prose section, and the `codex:` block's settings (`model`, `model_reasoning_effort`, `model_verbosity`, `sandbox_mode`, `nickname_candidates`).
 
+Subagent `mcpServers` items are validated as Claude Code reads them: a server name, or a mapping from one name to a full inline entry (`stdio`, `http`, `sse`, or `ws`). `codex.mcp_servers` uses the same Codex schema as `mcp-servers.yaml`; note that Codex 0.160 validates but does not apply `mcp_servers` from an agent file, and `doctor` says so.
+
 Codex agents also natively support `hooks`, `mcp_servers`, `skills`, and `tools` tables — but with different schemas from Claude's same-named frontmatter, so skillset does not auto-translate them: set `codex.hooks` / `codex.mcp_servers` / `codex.skills` / `codex.tools` and they are emitted verbatim as TOML tables (doctor reminds you when the Claude-side field is set without its Codex counterpart). Only `maxTurns`, `memory`, `background`, `isolation`, `initialPrompt`, `omitClaudeMd`, `experimental`, `observer`, `observerMessage`, and `observeSubagents` have no documented Codex equivalent and are dropped with a warning. See `agents/example-agent.md`.
 
 ## MCP servers (`./mcp-servers.yaml`)
@@ -151,7 +153,7 @@ servers:
     codex: { startup_timeout_sec: 120 } # merged into the Codex section; wins
 ```
 
-Codex mappings: `${VAR}`-only header values → `env_http_headers`, static headers → `http_headers`, `${VAR}`-only `env` values → `env_vars` (literals stay in `env`). SSE and WebSocket transports are rejected at the source level — Claude still accepts them, but Codex supports only stdio and streamable HTTP, and a union source must compile for both. Claude-only extras (`headersHelper`, `oauth`, …) go through the `claude:` block; Codex-only extras (`auth`, `required`, `enabled_tools`, …) through `codex:`. Writes are surgical: the Claude edit touches only the managed `mcpServers` entries in `~/.claude.json`; the Codex edit splices only the managed `[mcp_servers.<name>]` line spans in `~/.codex/config.toml`, so comments and formatting elsewhere survive byte-for-byte.
+Codex mappings: `${VAR}`-only header values → `env_http_headers`, static headers → `http_headers`, `${VAR}`-only `env` values → `env_vars` (literals stay in `env`). SSE and WebSocket transports are rejected at the source level — Claude still accepts them, but Codex supports only stdio and streamable HTTP, and a union source must compile for both. Claude-only extras (`headersHelper`, `oauth`, …) go through the `claude:` block; Codex-only extras (`auth`, `required`, `enabled_tools`, …) through `codex:`. Both blocks are typed against each tool's own schema (Claude Code 2.1.288's MCP entry, Codex 0.160's `[mcp_servers.<name>]` table), so a wrong type or value fails to parse, and `doctor` validates the merged per-target entry: missing or mismatched transport fields (for example a Codex `args` on a `url` server, or a Claude `type: http` without a `url`) are errors, while fields the chosen transport does not read — including renamed ones such as Codex's old `experimental_environment`, now `environment_id` — are kept in the output and reported as warnings. Writes are surgical: the Claude edit touches only the managed `mcpServers` entries in `~/.claude.json`; the Codex edit splices only the managed `[mcp_servers.<name>]` line spans in `~/.codex/config.toml`, so comments and formatting elsewhere survive byte-for-byte.
 
 ## Instructions (`./instructions.md`)
 
@@ -179,7 +181,7 @@ Both tools support 11 shared events (`SessionStart/End`, `PreToolUse`, `Permissi
 
 ## Defaults (`./defaults.yaml`)
 
-Model/effort defaults, applied as surgical key-level edits (`model`/`effortLevel` in Claude's `settings.json`; top-level `model`/`model_reasoning_effort`/`model_verbosity` scalars in Codex's `config.toml`, comments preserved). Keys the user set by hand are skipped as unmanaged.
+Model/effort defaults, applied as surgical key-level edits (`model`/`effortLevel` in Claude's `settings.json`; top-level `model`/`model_reasoning_effort`/`model_verbosity` scalars in Codex's `config.toml`, comments preserved). Keys the user set by hand are skipped as unmanaged. `claude.effort` accepts exactly what `effortLevel` accepts: `low`, `medium`, `high`, or `xhigh` (not `max`, which only skill and subagent frontmatter `effort` takes).
 
 ```yaml
 claude: { model: opus, effort: high }

@@ -11,6 +11,11 @@ import type { SourceAgent, SourceSkill } from './discover.js';
 import { applyCodexFallbacks, argumentNames } from './fallback.js';
 import { parseSkillFile, type ParsedSkillFile } from './frontmatter.js';
 import { unknownClaudeHookFields, type ClaudeHookSettings } from './hook-schema.js';
+import {
+  codexUnknownFieldHint,
+  unknownClaudeMcpFields,
+  unknownCodexMcpFields,
+} from './mcp-schema.js';
 import { renderConditionals } from './template.js';
 
 /** One finding about a skill. Errors block sync; warnings do not. */
@@ -229,6 +234,66 @@ function checkManualAgentKeys(parsed: ParsedAgentFile, record: Record<string, un
   );
 }
 
+function checkInlineMcpServer(
+  index: number,
+  item: Record<string, Record<string, unknown>>,
+): Issue[] {
+  const issues: Issue[] = [];
+  const names = Object.keys(item);
+
+  if (names.length !== 1) {
+    issues.push(
+      warning(
+        `mcpServers[${index}] has ${names.length} keys — Claude Code requires exactly one server name per inline item and drops it otherwise`,
+      ),
+    );
+  }
+
+  for (const [serverName, entry] of Object.entries(item)) {
+    for (const field of unknownClaudeMcpFields(entry)) {
+      issues.push(
+        warning(
+          `mcpServers[${index}] server \`${serverName}\` has unknown field \`${field}\` — Claude Code ignores it for this transport`,
+        ),
+      );
+    }
+  }
+
+  return issues;
+}
+
+function checkCodexAgentMcpServers(parsed: ParsedAgentFile): Issue[] {
+  const servers = parsed.frontmatter.codex?.mcp_servers;
+  if (servers === undefined) return [];
+
+  const issues = [
+    warning(
+      '`codex.mcp_servers` is validated but not applied — Codex 0.160 drops `mcp_servers` from an agent role file; register the server in config.toml instead',
+    ),
+  ];
+
+  for (const [serverName, section] of Object.entries(servers)) {
+    for (const field of unknownCodexMcpFields(section)) {
+      const hint = codexUnknownFieldHint(field);
+      issues.push(
+        warning(
+          `codex.mcp_servers.${serverName} has unknown field \`${field}\` — Codex ignores it${hint ? `; ${hint}` : ''}`,
+        ),
+      );
+    }
+  }
+
+  return issues;
+}
+
+function checkAgentMcpServers(parsed: ParsedAgentFile): Issue[] {
+  const inline = (parsed.frontmatter.mcpServers ?? []).flatMap((item, index) =>
+    typeof item === 'string' ? [] : checkInlineMcpServer(index, item),
+  );
+
+  return [...inline, ...checkCodexAgentMcpServers(parsed)];
+}
+
 function checkAgentCodexMapping(parsed: ParsedAgentFile): Issue[] {
   const record = parsed.frontmatter as Record<string, unknown>;
   const issues = [...checkDroppedAgentKeys(record), ...checkManualAgentKeys(parsed, record)];
@@ -284,6 +349,7 @@ export function checkAgent(agent: SourceAgent): AgentReport {
   issues.push(
     ...checkHookFields(parsed.frontmatter.hooks),
     ...checkAgentBody(parsed),
+    ...checkAgentMcpServers(parsed),
     ...checkAgentCodexMapping(parsed),
   );
 
