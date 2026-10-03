@@ -14,11 +14,20 @@ relying on this after either tool has had major releases.
 
 - **Codex HAS lifecycle hooks.** Events: `SessionStart`, `SessionEnd`,
   `PreToolUse`, `PermissionRequest`, `PostToolUse`, `UserPromptSubmit`,
-  `Stop`, `PreCompact`, `PostCompact`, `SubagentStart`, `SubagentStop`.
+  `Stop`, `PreCompact`, `PostCompact`, `SubagentStart`, `SubagentStop`, plus
+  Codex-only `Interrupt` (0.150.0+, #40511; fires when an active top-level
+  turn is interrupted; absent from Claude Code). Hooks re-verified 2026-10-03
+  against codex-cli 0.160.0 docs/release notes (installed binary 0.147.0
+  confirmed the 11-event enum without `Interrupt`).
   Config: `~/.codex/hooks.json`, inline `[hooks]` in config.toml, project
   `.codex/hooks.json`, plugin `hooks/hooks.json`. Schema:
   `{"hooks": {"<Event>": [{"matcher": "<regex>", "hooks": [{"type": "command", "command": "...", "timeout": 600, "statusMessage": "..."}]}]}}`
-  — only `type: "command"` is operational. Hooks are trust-gated (SHA-256 of
+  — `type: "command"` and `type: "mcp_tool"` (`server`, `tool`, `input`;
+  0.148.0+, enabled in sessions 0.149.0) are operational; `prompt`/`agent`
+  are "parsed but skipped". Newer handler fields: `async` (0.148.0+),
+  `commandWindows`, `additionalContextLimit`. Matchers are regex: tool name
+  (Pre/PostToolUse, PermissionRequest), `manual|auto` (Pre/PostCompact),
+  `startup|resume|clear|compact` (SessionStart), agent type (Subagent*). Hooks are trust-gated (SHA-256 of
   the hook section, recorded in config.toml `[hooks.state]`; `/hooks` to
   trust; `--dangerously-bypass-hook-trust` to skip). The separate `notify`
   config key is a single external-program notification hook, NOT the hooks
@@ -65,9 +74,24 @@ present, enforced since ~v2.1.202), `command`, `args`, `env`, `url`,
 `oauth` (`clientId`, `callbackPort`, `authServerMetadataUrl`, `scopes`).
 `${VAR}` and `${VAR:-default}` expansion. No per-entry `tools` filter key.
 
-**Hooks**: ~30 events (Session/turn/tool/agent-team/file/context/notification/
-MCP families); handler types `command`, `http`, `mcp_tool`, `prompt`,
-`agent`. Skill/agent frontmatter `hooks:` uses the same schema, scoped to the
+**Hooks** (re-verified 2026-10-03 against Claude Code 2.1.288 — docs
+lifecycle table, binary strings, CHANGELOG): 33 events — the 11 shared with
+Codex plus `Setup`, `UserPromptExpansion`, `StopFailure`, `PostToolBatch`,
+`PermissionDenied`, `PostToolUseFailure`, `TeammateIdle`, `TaskCreated`,
+`TaskCompleted`, `InstructionsLoaded`, `ConfigChange`, `CwdChanged`,
+`DirectoryAdded`, `FileChanged`, `WorktreeCreate`, `WorktreeRemove`,
+`Notification`, `MessageDisplay`, `Elicitation`, `ElicitationResult`,
+`PreModelSwitch`, `PostModelSwitch` (the last two added in 2.1.251). No
+`Interrupt`. Handler types `command`, `http`, `mcp_tool`, `prompt`, `agent`
+(experimental; no longer runs on `PermissionRequest` since 2.1.280). Common
+handler fields: `type`, `if` (permission-rule syntax, tool events), `timeout`
+(s; default 600, 30 prompt, 60 agent, 30 on UserPromptSubmit/*ModelSwitch, 10
+on MessageDisplay), `statusMessage`, `once` (skills only). command: `command`,
+`args` (exec form, no shell), `async`, `asyncRewake`, `shell`. http: `url`,
+`headers`, `allowedEnvVars`. mcp_tool: `server`, `tool`, `input`. prompt/agent:
+`prompt`, `model`. No matcher support on `UserPromptSubmit`, `PostToolBatch`,
+`Stop`, `TeammateIdle`, `TaskCreated`, `TaskCompleted`, `WorktreeCreate`,
+`WorktreeRemove`, `MessageDisplay`, `CwdChanged`. Skill/agent frontmatter `hooks:` uses the same schema, scoped to the
 component's lifetime.
 
 **Memory**: `CLAUDE.md` chain (managed → `~/.claude/CLAUDE.md` → project →

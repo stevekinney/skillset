@@ -50,6 +50,15 @@ describe('planHooksApply', () => {
     ]);
   });
 
+  it('restricts claude to its supported events', async () => {
+    const files = await makeFiles();
+    const interrupt = parseHooksSource('hooks:\n  Interrupt:\n    - command: ./stop.sh\n');
+    const actions = await planHooksApply(interrupt, files, freshLedger(), options);
+    expect(actions.map((action) => `${action.target}:${action.name}:${action.action}`)).toEqual([
+      'codex:Interrupt/*/0:write',
+    ]);
+  });
+
   it('flags hand-edited managed entries as drifted', async () => {
     const files = await makeFiles();
     const ledger = freshLedger();

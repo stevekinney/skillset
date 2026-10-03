@@ -5,10 +5,11 @@ import type { Issue } from './doctor.js';
 import { isMapping, type Target } from './frontmatter.js';
 
 /**
- * The lifecycle events Codex supports (verified against the official hooks
- * doc and live hooks.json files). All of them also exist in Claude Code.
+ * Lifecycle events both tools support. Verified October 2026 against Claude
+ * Code 2.1.288 and codex-cli 0.160.0 (official hooks docs, release notes, and
+ * the installed binaries' event enums).
  */
-export const CODEX_HOOK_EVENTS = new Set([
+const SHARED_HOOK_EVENTS = [
   'SessionStart',
   'SessionEnd',
   'PreToolUse',
@@ -20,12 +21,11 @@ export const CODEX_HOOK_EVENTS = new Set([
   'PostCompact',
   'SubagentStart',
   'SubagentStop',
-]);
+] as const;
 
 /**
- * Claude-only events (beyond the shared set above) that a hook may target
- * with `targets: [claude]`. Kept to the documented list so doctor can catch
- * typos in event names.
+ * Claude-only events that a hook may target with `targets: [claude]`. Kept to
+ * the documented list so doctor can catch typos in event names.
  */
 export const CLAUDE_ONLY_HOOK_EVENTS = new Set([
   'Setup',
@@ -48,7 +48,27 @@ export const CLAUDE_ONLY_HOOK_EVENTS = new Set([
   'MessageDisplay',
   'Elicitation',
   'ElicitationResult',
+  // Claude Code 2.1.251+.
+  'PreModelSwitch',
+  'PostModelSwitch',
 ]);
+
+/** Codex-only events that a hook may target with `targets: [codex]`. */
+export const CODEX_ONLY_HOOK_EVENTS = new Set([
+  // codex-cli 0.150.0+.
+  'Interrupt',
+]);
+
+/** Every lifecycle event Claude Code supports. */
+export const CLAUDE_HOOK_EVENTS = new Set([...SHARED_HOOK_EVENTS, ...CLAUDE_ONLY_HOOK_EVENTS]);
+
+/** Every lifecycle event Codex supports. */
+export const CODEX_HOOK_EVENTS = new Set([...SHARED_HOOK_EVENTS, ...CODEX_ONLY_HOOK_EVENTS]);
+
+/** Whether a target supports a hook event. */
+export function supportsHookEvent(target: Target, event: string): boolean {
+  return (target === 'claude' ? CLAUDE_HOOK_EVENTS : CODEX_HOOK_EVENTS).has(event);
+}
 
 const hookSchema = z.object({
   matcher: z.string().optional(),
@@ -119,7 +139,7 @@ export function checkHooksSource(source: HooksSource): Issue[] {
   const issues: Issue[] = [];
 
   for (const [event, definitions] of Object.entries(source.hooks)) {
-    const knownEvent = CODEX_HOOK_EVENTS.has(event) || CLAUDE_ONLY_HOOK_EVENTS.has(event);
+    const knownEvent = CLAUDE_HOOK_EVENTS.has(event) || CODEX_HOOK_EVENTS.has(event);
     if (!knownEvent) {
       issues.push({
         severity: 'error',
@@ -129,11 +149,15 @@ export function checkHooksSource(source: HooksSource): Issue[] {
     }
 
     for (const definition of definitions) {
-      const targets = hookTargets(definition);
-      if (targets.includes('codex') && !CODEX_HOOK_EVENTS.has(event)) {
+      const unsupported = hookTargets(definition).find(
+        (target) => !supportsHookEvent(target, event),
+      );
+      if (unsupported !== undefined) {
+        const [owner, ownerTarget] =
+          unsupported === 'codex' ? ['Claude', 'claude'] : ['Codex', 'codex'];
         issues.push({
           severity: 'error',
-          message: `hook event \`${event}\` is Claude-only — add \`targets: [claude]\` to the \`${definition.command}\` hook`,
+          message: `hook event \`${event}\` is ${owner}-only — add \`targets: [${ownerTarget}]\` to the \`${definition.command}\` hook`,
         });
       }
     }

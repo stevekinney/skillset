@@ -175,7 +175,7 @@ hooks:
       targets: [claude] # Claude-only event — restriction required
 ```
 
-Codex supports 11 events (`SessionStart/End`, `PreToolUse`, `PermissionRequest`, `PostToolUse`, `UserPromptSubmit`, `Stop`, `PreCompact/PostCompact`, `SubagentStart/Stop`), all of which exist in Claude's larger set; `doctor` errors when a Codex-targeted hook uses a Claude-only event. Ownership is entry-level via the ledger: hand-written hooks in the same files are never touched, and a managed entry you hand-edit is treated as drifted. Heads-up on every Codex hook write: Codex trust-hashes its hook config, so changed hooks must be re-trusted via `/hooks`.
+Both tools support 11 shared events (`SessionStart/End`, `PreToolUse`, `PermissionRequest`, `PostToolUse`, `UserPromptSubmit`, `Stop`, `PreCompact/PostCompact`, `SubagentStart/Stop`). Claude adds 22 more (including `PreModelSwitch`/`PostModelSwitch`, Claude Code 2.1.251+), and Codex adds `Interrupt` (codex-cli 0.150.0+). `doctor` errors when a hook targets a tool that lacks its event—restrict Claude-only events with `targets: [claude]` and `Interrupt` with `targets: [codex]`. Ownership is entry-level via the ledger: hand-written hooks in the same files are never touched, and a managed entry you hand-edit is treated as drifted. Heads-up on every Codex hook write: Codex trust-hashes its hook config, so changed hooks must be re-trusted via `/hooks`.
 
 ## Defaults (`./defaults.yaml`)
 
