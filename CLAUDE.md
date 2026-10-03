@@ -76,6 +76,7 @@ bun run package:check    # Run publint + @arethetypeswrong/cli on packed tarball
 - `mcp-schema.ts` — Claude Code's MCP server entry schema, Codex's `[mcp_servers.<name>]` schema, and the subagent `mcpServers` item schema (used by `mcp-servers.yaml` override blocks, agent frontmatter, and doctor).
 - `mcp-config.ts` / `hooks-config.ts` / `defaults-config.ts` — the three single-file source schemas and their per-target mappings.
 - `mcp-apply.ts` / `hooks-apply.ts` / `defaults-apply.ts` — surgical application to the shared config files, entry-level ledger ownership, backups.
+- `claude-hook-shared.ts` / `claude-hook-input-schemas.ts` / `claude-hook-output-schemas.ts` / `codex-hook-payloads.ts` — public Zod schemas for every hook event's stdin input and stdout output (inputs loose, Codex outputs strict), with `parse*HookInput`/`parse*HookOutput` helpers; exported from `index.ts` for hook authors.
 - `config-files.ts` — shared JSON config read/write + backup helpers and the `EmbeddedAction` type.
 - `toml-splice.ts` — comment-preserving `[section]` and top-level-scalar splicing for `config.toml`.
 - `import.ts` — reverse-compiles installed skills/agents/instructions into sources.

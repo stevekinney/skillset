@@ -84,6 +84,30 @@ Configuration and help text:
 - `environment` is the resolved configuration (`NODE_ENV`, `SKILLSET_DIRECTORY`) read once at module load through `@lostgradient/environmentalist`; `parseEnvironment(source?)` validates an arbitrary record against the same schema without the dotenv/config-file chain, for tests.
 - `commandHelp(command)` and `USAGE` are the help text `-h`/`--help` prints.
 
+Hook payloads (for writing hook scripts):
+
+- `claudeHookInputSchema` (33 events, discriminated on `hook_event_name`) and `codexHookInputSchema` (12 events) validate the JSON a hook receives on stdin; `claudeHookInputSchemas`/`codexHookInputSchemas` hold the per-event schemas keyed by event name. `parseClaudeHookInput(payload)`/`parseCodexHookInput(payload)` dispatch on `hook_event_name` and throw a `ZodError` on a mismatch; `safeParseClaudeHookInput`/`safeParseCodexHookInput` return a result instead.
+- `claudeHookOutputSchema` (with its 22 `claudeHookSpecificOutputSchemas` variants and the `claudeAsyncHookOutputSchema` async form) and `codexHookOutputSchemas` (keyed by event) describe what a hook may print to stdout; `parseClaudeHookOutput(payload)` and `parseCodexHookOutput(eventName, payload)` validate it. `claudeHookEventNames`/`codexHookEventNames` list the events.
+- Input and Claude output schemas are `z.looseObject`, so a field a newer Claude Code or Codex adds never fails a parse and survives into the parsed value. Codex output schemas are strict, because Codex marks a hook run Failed when stdout carries an unknown key. Rules the schemas cannot express (a Codex `block` needs a non-empty `reason`, PreToolUse `allow` needs `updatedInput`) are not enforced; see the Codex hooks docs. `tool_input` and `tool_response` stay `unknown` because their shape depends on the tool.
+- Types: `ClaudeHookInput`, `ClaudeHookInputFor<'Stop'>`, `ClaudeHookOutput`, `CodexHookInput`, `CodexHookInputFor<'Stop'>`, `CodexHookOutputFor<'Stop'>`, and the event name unions.
+
+```typescript
+import { parseClaudeHookInput, type ClaudeHookOutput } from '@lostgradient/skillset';
+
+const input = parseClaudeHookInput(JSON.parse(await Bun.stdin.text()));
+
+if (input.hook_event_name === 'PreToolUse' && input.tool_name === 'Bash') {
+  const output: ClaudeHookOutput = {
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: 'deny',
+      permissionDecisionReason: 'Shell access is disabled in this repository.',
+    },
+  };
+  console.log(JSON.stringify(output));
+}
+```
+
 Every exported type (`SourceKind`, `Target`, `Scope`, `Invocation`, `Analysis`, `Ledger`, `LedgerItem`, `SyncAction`, `SyncOptions`, `CompilableSkill`/`CompilableAgent`/`CompilableSources`, `SourceSkill`/`SourceAgent`/`SourceFile`/`Sources`, `SkillFrontmatter`/`AgentFrontmatter`, `ParsedSkillFile`/`ParsedAgentFile`, `McpServer`/`ParsedMcpSource`, `HooksSource`, `DefaultsSource`, `Environment`, `ListEntry`/`ShowFile`, `TargetStatus`, `KindFilter`, `UsageOutcome`, `RenderResult`/`TemplateError`, `EmittedFile`, `Targets`/`ToolTargets`, `EmbeddedAction`) ships alongside its function — see `src/index.ts` for the complete, current export list.
 
 ## Skills (`./skills/<name>/SKILL.md`)

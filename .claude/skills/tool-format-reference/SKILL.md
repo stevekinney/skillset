@@ -231,6 +231,46 @@ tool allowlist array. In a role file all three are validated against
 (`enabled = false`, disabled bundled set, `include_instructions = false`);
 `hooks` and `tools` are dropped (role_tests hostile-role test).
 
+**Hook payloads** (verified 2026-10-03 against Claude Code 2.1.288: binary
+Zod schemas plus code.claude.com/docs/en/hooks; codex-cli 0.160.0:
+`codex-rs/hooks/schema/generated`, `output_parser.rs`, per-event files at
+rust-v0.160.0). `src/claude-hook-*.ts` and `src/codex-hook-payloads.ts`
+encode them as the public `@lostgradient/skillset` exports. Claude: every
+event's stdin is the common fields (`session_id`, `transcript_path`, `cwd`
+required; optional `scratchpad_dir`, `prompt_id`, `permission_mode` (plain
+string), `agent_id`, `agent_type`, `effort.level`) plus event fields; stdout is
+one object (`continue`, `suppressOutput`, `stopReason`, `decision`
+`approve|block`, `reason`, `systemMessage`, `terminalSequence`,
+`hookSpecificOutput`) or the async form `{async: true, asyncTimeout?}`. The
+binary has 22 `hookSpecificOutput` variants; SessionEnd, StopFailure,
+PreCompact, PostCompact, TeammateIdle, TaskCreated, TaskCompleted,
+InstructionsLoaded, ConfigChange, DirectoryAdded, WorktreeRemove have none.
+Setup and Notification have variants but Claude discards their output.
+`StopFailure.error` has 13 values in the binary (docs list 12; the extra is
+`verification_required`). `UserPromptSubmit.source` is in the binary but not
+the docs. `scratchpad_dir` is sent at runtime (2.1.257) but absent from the
+binary's exported schema. The binary accepts top-level `decision: approve`,
+the docs say `block` only. `hookSpecificOutput.hookEventName` must match the
+running event or Claude throws. Payload objects are loose: the binary strips
+unknown output keys (INFERRED from plain Zod objects, not tested). Codex:
+stdin always carries `session_id`, `transcript_path` (string or null), `cwd`,
+`hook_event_name`; `model` on all but SessionEnd; `turn_id` on all but
+SessionStart/SessionEnd; `permission_mode` (enum of five, runtime emits only
+`default` or `bypassPermissions`) except SessionEnd, PreCompact, PostCompact;
+`agent_id`/`agent_type` optional on PreToolUse, PermissionRequest,
+PostToolUse, PreCompact, PostCompact, UserPromptSubmit and required on
+SubagentStart/SubagentStop. Codex output structs use `deny_unknown_fields`, so
+one unknown key marks the run Failed: the exported output schemas are strict.
+SessionEnd stdout is never parsed (no schema). Interrupt output accepts only
+`systemMessage`. Compaction output is the four universal fields only. Stop and
+SubagentStop have no `hookSpecificOutput`. PreToolUse `ask`/`approve` parse but
+fail the run, `allow` needs `updatedInput`, `deny` needs a reason; these
+semantic rules are documented, not encoded. Delta from 0.147 to 0.160: new
+Interrupt event, SessionStart `source` gained `fork`. UNVERIFIED: whether Rust
+checks `hookEventName` inside `hookSpecificOutput` against the running event,
+exact `tool_response` shapes for MCP tools, per-tool `tool_input` shapes (kept
+`unknown`), introduction versions of PostToolBatch and UserPromptExpansion.
+
 **Other config.toml surface** a compiler should know: `model*` keys,
 `approval_policy` (untrusted|on-request|never), `sandbox_mode`,
 `shell_environment_policy`, `features` (check `codex features list` — the

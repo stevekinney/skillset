@@ -5,7 +5,46 @@ export {
   type AgentFrontmatter,
   type ParsedAgentFile,
 } from './agent-frontmatter.js';
+export {
+  claudeHookInputSchema,
+  claudeHookInputSchemas,
+  parseClaudeHookInput,
+  safeParseClaudeHookInput,
+  type ClaudeHookInput,
+  type ClaudeHookInputFor,
+} from './claude-hook-input-schemas.js';
+export {
+  claudeAsyncHookOutputSchema,
+  claudeHookOutputSchema,
+  claudeHookSpecificOutputSchema,
+  claudeHookSpecificOutputSchemas,
+  parseClaudeHookOutput,
+  type ClaudeAsyncHookOutput,
+  type ClaudeHookOutput,
+} from './claude-hook-output-schemas.js';
+export {
+  claudeCommonHookInputSchema,
+  claudeHookEventNames,
+  claudePermissionUpdateSchema,
+  claudeStopFailureErrors,
+  type ClaudeHookEventName,
+  type ClaudePermissionUpdate,
+} from './claude-hook-shared.js';
 export { analysisHasErrors, analyzeSources, type Analysis } from './analysis.js';
+export {
+  codexHookEventNames,
+  codexHookInputSchema,
+  codexHookInputSchemas,
+  codexHookOutputSchemas,
+  parseCodexHookInput,
+  parseCodexHookOutput,
+  safeParseCodexHookInput,
+  type CodexHookEventName,
+  type CodexHookInput,
+  type CodexHookInputFor,
+  type CodexHookOutput,
+  type CodexHookOutputFor,
+} from './codex-hook-payloads.js';
 export { defaultDependencies, runCli, type CliDependencies } from './cli.js';
 export { runDoctorTargets, runImport, runSync, type RunContext } from './commands-run.js';
 export {
