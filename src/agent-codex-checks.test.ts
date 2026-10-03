@@ -63,4 +63,20 @@ describe('Codex agent tables', () => {
   it('rejects a codex.tools allowlist array as a frontmatter error', () => {
     expect(withCodex('  tools: [Read]')[0]).toContain('error: invalid frontmatter');
   });
+
+  it('warns that an explicit sandbox_mode is emitted but discarded by Codex', () => {
+    const report = withCodex('  sandbox_mode: read-only').join('\n');
+    expect(report).toContain('`sandbox_mode` (set, `read-only`) is emitted but not applied');
+    expect(report).toContain('the Codex docs still list the key');
+  });
+
+  it('warns when sandbox_mode is implied by permissionMode, and stays quiet otherwise', () => {
+    const implied = agentMessages(
+      agent('---\nname: reviewer\ndescription: ok\npermissionMode: plan\n---\nx'),
+    ).join('\n');
+    expect(implied).toContain('implied by `permissionMode: plan`, `read-only`');
+
+    const none = agentMessages(agent('---\nname: reviewer\ndescription: ok\n---\nx')).join('\n');
+    expect(none).not.toContain('`sandbox_mode`');
+  });
 });

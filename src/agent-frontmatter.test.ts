@@ -150,11 +150,11 @@ describe('mcp server typing', () => {
     ]);
   });
 
-  it('rejects invalid inline entries', () => {
-    expect(() =>
-      parseAgentFile(frontmatterWith('mcpServers:\n  - a:\n      type: http')),
-    ).toThrow();
-    expect(() => parseAgentFile(frontmatterWith('mcpServers:\n  - 5'))).toThrow();
+  it('keeps invalid items so doctor can warn that Claude Code drops them', () => {
+    expect(
+      parseAgentFile(frontmatterWith('mcpServers:\n  - a:\n      type: http\n  - 5')).frontmatter
+        .mcpServers,
+    ).toEqual([{ a: { type: 'http' } }, 5]);
   });
 
   it('types codex.mcp_servers with the Codex schema', () => {

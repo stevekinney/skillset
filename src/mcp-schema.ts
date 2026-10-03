@@ -136,48 +136,17 @@ export function claudeMcpEntryProblems(entry: Record<string, unknown>): McpProbl
   return result.error.issues.map((issue) => ({ path: issue.path, message: issue.message }));
 }
 
-/** Fields of a Claude entry that its transport does not read. */
+/** Fields of a Claude entry that its transport does not read, as dotted paths (`oauth.` keys included). */
 export function unknownClaudeMcpFields(entry: Record<string, unknown>): string[] {
   const schema = claudeSchemaFor(entry);
   if (!schema || (entryType(entry) === undefined && entry['command'] === undefined)) return [];
 
-  return Object.keys(entry).filter((key) => !(key in schema.shape));
+  const unknown = Object.keys(entry).filter((key) => !(key in schema.shape));
+  if ('oauth' in schema.shape)
+    unknown.push(...unknownKeysOf(entry['oauth'], claudeOAuthSchema, 'oauth'));
+
+  return unknown;
 }
-
-/**
- * One item of a Claude subagent's `mcpServers` list: the name of an
- * already-configured server, or a mapping from a server name to a full inline
- * entry. Claude Code requires exactly one key per mapping at load time rather
- * than in its schema, so doctor reports that rule as a warning.
- */
-export const claudeAgentMcpServerSchema = z
-  .custom<string | Record<string, Record<string, unknown>>>()
-  .superRefine((item, context) => {
-    if (typeof item === 'string') return;
-
-    if (!isMapping(item)) {
-      context.addIssue({
-        code: 'custom',
-        message: 'expected a server name or a mapping of one server name to its entry',
-      });
-      return;
-    }
-
-    for (const [name, entry] of Object.entries(item)) {
-      if (!isMapping(entry)) {
-        context.addIssue({ code: 'custom', path: [name], message: 'expected a server entry' });
-        continue;
-      }
-
-      for (const problem of claudeMcpEntryProblems(entry)) {
-        context.addIssue({
-          code: 'custom',
-          path: [name, ...problem.path],
-          message: problem.message,
-        });
-      }
-    }
-  });
 
 // Codex 0.160.0's `[mcp_servers.<name>]` table (verified October 2026 against
 // config.schema.json and mcp_types.rs at rust-v0.160.0). Unknown keys are
@@ -185,19 +154,30 @@ export const claudeAgentMcpServerSchema = z
 // kept and reported as doctor warnings.
 const codexApprovalMode = z.enum(['auto', 'prompt', 'writes', 'approve']);
 
+const codexEnvironmentVariableObjectSchema = z.looseObject({
+  name: z.string(),
+  source: z.enum(['local', 'remote']).optional(),
+});
+
+const codexOAuthSchema = z.looseObject({
+  client_id: z.string().optional(),
+  client_secret: z.string().optional(),
+  callback_url: z.string().optional(),
+  callback_port: z.number().int().min(0).max(65_535).optional(),
+  authorization_server_issuer: z.string().optional(),
+});
+
+const codexToolSchema = z.looseObject({
+  approval_mode: codexApprovalMode.optional(),
+  output_token_limit: z.number().int().min(1).optional(),
+});
+
 const codexFields = {
   // Stdio transport (selected by `command`).
   command: z.string().optional(),
   args: z.array(z.string()).optional(),
   env: stringRecord.optional(),
-  env_vars: z
-    .array(
-      z.union([
-        z.string(),
-        z.looseObject({ name: z.string(), source: z.enum(['local', 'remote']).optional() }),
-      ]),
-    )
-    .optional(),
+  env_vars: z.array(z.union([z.string(), codexEnvironmentVariableObjectSchema])).optional(),
   cwd: z.string().optional(),
   // Streamable HTTP transport (selected by `url`).
   url: z.string().optional(),
@@ -206,15 +186,7 @@ const codexFields = {
   env_http_headers: stringRecord.optional(),
   http_headers_helper: z.string().optional(),
   auth: z.enum(['oauth', 'chatgpt', 'ema_auth']).optional(),
-  oauth: z
-    .looseObject({
-      client_id: z.string().optional(),
-      client_secret: z.string().optional(),
-      callback_url: z.string().optional(),
-      callback_port: z.number().int().min(0).max(65_535).optional(),
-      authorization_server_issuer: z.string().optional(),
-    })
-    .optional(),
+  oauth: codexOAuthSchema.optional(),
   oauth_resource: z.string().optional(),
   scopes: z.array(z.string()).optional(),
   // Either transport.
@@ -231,15 +203,7 @@ const codexFields = {
   default_tools_approval_mode: codexApprovalMode.optional(),
   enabled_tools: z.array(z.string()).optional(),
   disabled_tools: z.array(z.string()).optional(),
-  tools: z
-    .record(
-      z.string(),
-      z.looseObject({
-        approval_mode: codexApprovalMode.optional(),
-        output_token_limit: z.number().int().min(1).optional(),
-      }),
-    )
-    .optional(),
+  tools: z.record(z.string(), codexToolSchema).optional(),
   name: z.string().optional(),
 };
 
@@ -358,9 +322,41 @@ export function codexUnknownFieldHint(field: string): string | undefined {
   return CODEX_FIELD_HINTS.get(field);
 }
 
-/** Top-level fields of a Codex section that Codex does not read. */
+function unknownKeysOf(value: unknown, schema: z.ZodObject, prefix: string): string[] {
+  if (!isMapping(value)) return [];
+
+  return Object.keys(value)
+    .filter((key) => !(key in schema.shape))
+    .map((key) => `${prefix}.${key}`);
+}
+
+/**
+ * Fields of a Codex section that Codex does not read, as dotted paths. Beyond
+ * the top level, Codex's published schema also rejects unknown keys in the
+ * `oauth` table, object-form `env_vars` entries, and `tools.<tool>` tables.
+ */
 export function unknownCodexMcpFields(section: Record<string, unknown>): string[] {
-  return Object.keys(section).filter(
+  const unknown = Object.keys(section).filter(
     (key) => key !== 'bearer_token' && !(key in codexMcpFieldsSchema.shape),
   );
+
+  unknown.push(...unknownKeysOf(section['oauth'], codexOAuthSchema, 'oauth'));
+
+  const environmentVariables = section['env_vars'];
+  if (Array.isArray(environmentVariables)) {
+    environmentVariables.forEach((entry, index) => {
+      unknown.push(
+        ...unknownKeysOf(entry, codexEnvironmentVariableObjectSchema, `env_vars[${index}]`),
+      );
+    });
+  }
+
+  const tools = section['tools'];
+  if (isMapping(tools)) {
+    for (const [toolName, tool] of Object.entries(tools)) {
+      unknown.push(...unknownKeysOf(tool, codexToolSchema, `tools.${toolName}`));
+    }
+  }
+
+  return unknown;
 }

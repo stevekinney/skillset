@@ -205,14 +205,29 @@ describe('checkAgent', () => {
     expect(report).toContain('`codex.mcp_servers` is validated but not applied');
   });
 
-  it('reports invalid inline mcpServers entries as frontmatter errors', () => {
-    expect(
-      agentMessages(
-        agent(
-          '---\nname: reviewer\ndescription: ok\nmcpServers:\n  - a:\n      type: http\n---\nx',
-        ),
-      ).join('\n'),
-    ).toContain('error: invalid frontmatter');
+  it('warns, rather than errors, when Claude Code would drop an mcpServers item', () => {
+    const report = agentMessages(
+      agent(
+        '---\nname: reviewer\ndescription: ok\nmcpServers:\n  - a:\n      type: http\n  - b:\n      type: mystery\n  - 5\n  - c:\n      type: claudeai-proxy\n      url: x\n      id: y\n---\nx',
+      ),
+    );
+    const text = report.join('\n');
+    expect(report.some((line) => line.startsWith('error:'))).toBe(false);
+    expect(text).toContain('warning: mcpServers[0] a.url:');
+    expect(text).toContain('warning: mcpServers[1] b.type: unknown type `mystery`');
+    expect(text).toContain('warning: mcpServers[2] expected a server name');
+    expect(text).toContain('mcpServers[3] c.type: `claudeai-proxy` is a claude.ai connector');
+    expect(text).toContain('drops this item, and still loads the agent');
+  });
+
+  it('warns about nested unknown fields in codex.mcp_servers', () => {
+    const text = agentMessages(
+      agent(
+        '---\nname: reviewer\ndescription: ok\ncodex:\n  mcp_servers:\n    docs:\n      url: https://x\n      oauth:\n        clientid: a\n---\nx',
+      ),
+    ).join('\n');
+    expect(text).toContain('codex.mcp_servers.docs has unknown field `oauth.clientid`');
+    expect(text).toContain('the Codex docs still list the key');
   });
 
   it('does not warn when the codex counterpart is set explicitly', () => {

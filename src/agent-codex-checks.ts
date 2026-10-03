@@ -1,4 +1,4 @@
-import type { ParsedAgentFile } from './agent-frontmatter.js';
+import { impliedSandboxMode, type ParsedAgentFile } from './agent-frontmatter.js';
 import {
   ambiguousCodexSkillRules,
   hasEffectiveCodexSkillSettings,
@@ -73,11 +73,28 @@ function checkCodexAgentTools(parsed: ParsedAgentFile): Issue[] {
   ];
 }
 
-/** Doctor checks for the `codex.hooks`, `codex.skills`, and `codex.tools` tables of an agent. */
+function checkCodexAgentSandboxMode(parsed: ParsedAgentFile): Issue[] {
+  const { codex, permissionMode } = parsed.frontmatter;
+  const explicit = codex?.sandbox_mode;
+  const sandboxMode = explicit ?? impliedSandboxMode(permissionMode);
+  if (sandboxMode === undefined) return [];
+
+  const source =
+    explicit === undefined ? `implied by \`permissionMode: ${permissionMode}\`` : 'set';
+
+  return [
+    warning(
+      `\`sandbox_mode\` (${source}, \`${sandboxMode}\`) is emitted but not applied — Codex 0.160 discards \`sandbox_mode\` from an agent role file even though the Codex docs still list the key; set the sandbox in config.toml or a profile instead`,
+    ),
+  ];
+}
+
+/** Doctor checks for the `codex.hooks`, `codex.skills`, and `codex.tools` tables and the emitted `sandbox_mode` of an agent. */
 export function checkCodexAgentTables(parsed: ParsedAgentFile): Issue[] {
   return [
     ...checkCodexAgentHooks(parsed),
     ...checkCodexAgentSkills(parsed),
     ...checkCodexAgentTools(parsed),
+    ...checkCodexAgentSandboxMode(parsed),
   ];
 }

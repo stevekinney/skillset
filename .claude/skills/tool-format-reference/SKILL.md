@@ -183,12 +183,12 @@ global config forms, NOT Claude's same-named frontmatter). Global `[agents]`:
 
 **MCP** (`[mcp_servers.<name>]` in config.toml): `command`, `args`, `env`
 (literal values), `env_vars` (names to forward), `cwd`, `url`, `auth`
-(oauth|chatgpt), `bearer_token_env_var`, `http_headers`, `env_http_headers`,
+(oauth|chatgpt|ema_auth), `bearer_token_env_var`, `http_headers`, `env_http_headers`,
 `startup_timeout_sec` (default 10), `tool_timeout_sec` (default 60),
 `enabled`, `required`, `enabled_tools`, `disabled_tools`,
 `default_tools_approval_mode` (auto|prompt|writes|approve), per-tool
 `[mcp_servers.<name>.tools.<tool>] approval_mode`, `oauth_resource`,
-`experimental_environment`. `codex mcp add|list|get|remove|login|logout`.
+`environment_id`. `codex mcp add|list|get|remove|login|logout`.
 
 Re-verified 2026-10-03 against codex-cli 0.160.0 (config.schema.json,
 mcp_types.rs at rust-v0.160.0). `command` selects stdio, `url` selects
@@ -204,8 +204,13 @@ them). New since 0.147: `startup_readiness` (connection|catalog),
 also `environment_id`, `omit_tools_from` (code_mode|deferred|direct),
 `supports_parallel_tool_calls`, `scopes`, `startup_timeout_ms`, `auth`
 (oauth|chatgpt|ema_auth), `env_vars` entries as a name or `{name, source}`.
-Agent role files: `mcp_servers` is validated then DROPPED by role.rs, so
-`codex.mcp_servers` in an agent has no runtime effect in 0.160.
+The `oauth` table, object-form `env_vars` entries, and `tools.<tool>` tables
+also reject unknown keys in the published schema (skillset warns with dotted
+paths such as `oauth.clientid`). Agent role files: `mcp_servers` and
+`sandbox_mode` are validated then DROPPED by role.rs (0.149+), so
+`codex.mcp_servers` and `codex.sandbox_mode` (including one implied by
+`permissionMode`) in an agent have no runtime effect in 0.160 even though the
+Codex docs still list them.
 
 **Codex hooks, skills, and tools tables** (re-verified 2026-10-03 against
 codex-cli 0.160.0: hook_config.rs, discovery.rs, skills_config.rs, role.rs,

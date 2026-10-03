@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
 import {
-  claudeAgentMcpServerSchema,
   claudeMcpEntryProblems,
   claudeMcpOverrideSchema,
   codexMcpFieldsSchema,
@@ -105,24 +104,6 @@ describe('claudeMcpOverrideSchema', () => {
     });
     expect(() => claudeMcpOverrideSchema.parse({ timeout: 'soon' })).toThrow();
     expect(() => claudeMcpOverrideSchema.parse({ type: 'carrier-pigeon' })).toThrow();
-  });
-});
-
-describe('claudeAgentMcpServerSchema', () => {
-  it('accepts a server name or a one-key inline entry', () => {
-    expect(claudeAgentMcpServerSchema.parse('github')).toBe('github');
-    const inline = { playwright: { type: 'stdio', command: 'npx', args: ['-y', 'x'] } };
-    expect(claudeAgentMcpServerSchema.parse(inline)).toEqual(inline);
-  });
-
-  it('validates inline entries and rejects other shapes', () => {
-    const bad = claudeAgentMcpServerSchema.safeParse({ a: { type: 'http' } });
-    expect(bad.success).toBe(false);
-    expect(bad.error?.issues[0]?.path).toEqual(['a', 'url']);
-    expect(claudeAgentMcpServerSchema.safeParse({ a: 'text' }).success).toBe(false);
-    expect(claudeAgentMcpServerSchema.safeParse(5).success).toBe(false);
-    expect(claudeAgentMcpServerSchema.safeParse([]).success).toBe(false);
-    expect(claudeAgentMcpServerSchema.safeParse({ a: { type: 'sdk' } }).success).toBe(false);
   });
 });
 
@@ -267,5 +248,33 @@ describe('codexMcpFieldsSchema', () => {
     });
     expect(() => codexMcpFieldsSchema.parse({ required: 'yes' })).toThrow();
     expect(codexMcpServerSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+describe('nested unknown fields', () => {
+  it('reports unknown keys inside Codex oauth, env_vars objects, and tools tables', () => {
+    expect(
+      unknownCodexMcpFields({
+        url: 'x',
+        oauth: { client_id: 'a', clientid: 'b' },
+        env_vars: ['PLAIN', { name: 'A', nme: 'b' }, { name: 'B' }],
+        tools: {
+          search: { approval_mode: 'auto', approval: 'x' },
+          other: { output_token_limit: 1 },
+        },
+      }),
+    ).toEqual(['oauth.clientid', 'env_vars[1].nme', 'tools.search.approval']);
+  });
+
+  it('ignores malformed nested containers', () => {
+    expect(unknownCodexMcpFields({ oauth: 'x', env_vars: 'x', tools: 'x' })).toEqual([]);
+    expect(unknownCodexMcpFields({ env_vars: [5], tools: { a: 5 } })).toEqual([]);
+  });
+
+  it('reports unknown keys inside a Claude oauth object', () => {
+    expect(
+      unknownClaudeMcpFields({ type: 'http', url: 'x', oauth: { clientId: 'a', clientid: 'b' } }),
+    ).toEqual(['oauth.clientid']);
+    expect(unknownClaudeMcpFields({ type: 'http', url: 'x', oauth: 'x' })).toEqual([]);
   });
 });

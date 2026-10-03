@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { claudeEffortSchema, splitFrontmatter } from './frontmatter.js';
 import { codexSkillsSchema, codexToolsSchema } from './codex-agent-tables.js';
 import { claudeHookSettingsSchema, codexHookSettingsSchema } from './hook-schema.js';
-import { claudeAgentMcpServerSchema, codexMcpServerSchema } from './mcp-schema.js';
+import { claudeAgentMcpServerSchema } from './agent-mcp-servers.js';
+import { codexMcpServerSchema } from './mcp-schema.js';
 
 const stringOrStringList = z.union([z.string(), z.array(z.string())]);
 
