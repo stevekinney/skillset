@@ -10,6 +10,7 @@ import {
 import type { SourceAgent, SourceSkill } from './discover.js';
 import { applyCodexFallbacks, argumentNames } from './fallback.js';
 import { parseSkillFile, type ParsedSkillFile } from './frontmatter.js';
+import { unknownClaudeHookFields, type ClaudeHookSettings } from './hook-schema.js';
 import { renderConditionals } from './template.js';
 
 /** One finding about a skill. Errors block sync; warnings do not. */
@@ -83,6 +84,14 @@ function checkDescription(description: string): Issue[] {
   return issues;
 }
 
+function checkHookFields(hooks: ClaudeHookSettings | undefined): Issue[] {
+  if (!hooks) return [];
+
+  return unknownClaudeHookFields(hooks).map((path) =>
+    warning(`unknown hook field \`${path}\` — Claude Code ignores it`),
+  );
+}
+
 function checkBody(parsed: ParsedSkillFile, raw: string): Issue[] {
   const issues: Issue[] = [];
 
@@ -140,6 +149,7 @@ export function checkSkill(skill: SourceSkill): SkillReport {
   const issues = [
     ...checkName(parsed.frontmatter.name, skill.name),
     ...checkDescription(parsed.frontmatter.description),
+    ...checkHookFields(parsed.frontmatter.hooks),
     ...checkBody(parsed, skill.raw),
   ];
 
@@ -271,7 +281,11 @@ export function checkAgent(agent: SourceAgent): AgentReport {
     issues.push(error('description must not be empty'));
   }
 
-  issues.push(...checkAgentBody(parsed), ...checkAgentCodexMapping(parsed));
+  issues.push(
+    ...checkHookFields(parsed.frontmatter.hooks),
+    ...checkAgentBody(parsed),
+    ...checkAgentCodexMapping(parsed),
+  );
 
   return { name: agent.name, issues, parsed };
 }

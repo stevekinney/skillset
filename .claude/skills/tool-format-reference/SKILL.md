@@ -14,11 +14,20 @@ relying on this after either tool has had major releases.
 
 - **Codex HAS lifecycle hooks.** Events: `SessionStart`, `SessionEnd`,
   `PreToolUse`, `PermissionRequest`, `PostToolUse`, `UserPromptSubmit`,
-  `Stop`, `PreCompact`, `PostCompact`, `SubagentStart`, `SubagentStop`.
+  `Stop`, `PreCompact`, `PostCompact`, `SubagentStart`, `SubagentStop`, plus
+  Codex-only `Interrupt` (0.150.0+, #40511; fires when an active top-level
+  turn is interrupted; absent from Claude Code). Hooks re-verified 2026-10-03
+  against codex-cli 0.160.0 docs/release notes (installed binary 0.147.0
+  confirmed the 11-event enum without `Interrupt`).
   Config: `~/.codex/hooks.json`, inline `[hooks]` in config.toml, project
   `.codex/hooks.json`, plugin `hooks/hooks.json`. Schema:
   `{"hooks": {"<Event>": [{"matcher": "<regex>", "hooks": [{"type": "command", "command": "...", "timeout": 600, "statusMessage": "..."}]}]}}`
-  — only `type: "command"` is operational. Hooks are trust-gated (SHA-256 of
+  — `type: "command"` and `type: "mcp_tool"` (`server`, `tool`, `input`;
+  0.148.0+, enabled in sessions 0.149.0) are operational; `prompt`/`agent`
+  are "parsed but skipped". Newer handler fields: `async` (0.148.0+),
+  `commandWindows`, `additionalContextLimit`. Matchers are regex: tool name
+  (Pre/PostToolUse, PermissionRequest), `manual|auto` (Pre/PostCompact),
+  `startup|resume|clear|compact` (SessionStart), agent type (Subagent*). Hooks are trust-gated (SHA-256 of
   the hook section, recorded in config.toml `[hooks.state]`; `/hooks` to
   trust; `--dangerously-bypass-hook-trust` to skip). The separate `notify`
   config key is a single external-program notification hook, NOT the hooks
@@ -42,7 +51,14 @@ to directory name): `name`, `description`, `when_to_use`, `argument-hint`,
 `arguments`, `disable-model-invocation`, `user-invocable`, `allowed-tools`,
 `disallowed-tools`, `model`, `effort` (low…max), `context: fork`, `agent`,
 `background` (v2.1.218+, with fork), `hooks`, `paths`, `shell`
-(bash|powershell). Booleans accept yes/no/on/off/1/0 since v2.1.218.
+(bash|powershell). Booleans (`disable-model-invocation`, `user-invocable`,
+`background`) accept 1/true/yes/on and 0/false/no/off, trimmed and
+case-insensitive, since v2.1.218; other values read as false. `effort` is
+low|medium|high|xhigh|max OR an integer. `context`: inline|fork (only fork
+acts). `disallowedTools` is accepted as an alias of `disallowed-tools`.
+`model: inherit` allowed. Skill frontmatter fields re-verified 2026-10-03
+against 2.1.288 (binary zod schema + docs + CHANGELOG); none added since
+2.1.221.
 `description` + `when_to_use` truncate at 1,536 chars in the listing.
 Body substitutions: `$ARGUMENTS`, `$ARGUMENTS[N]`/`$N` (0-based), named
 `$name`, `${CLAUDE_SESSION_ID}`, `${CLAUDE_EFFORT}`, `${CLAUDE_SKILL_DIR}`,
@@ -55,7 +71,18 @@ required; name lowercase+hyphens, no `:`): `tools`, `disallowedTools`,
 bypassPermissions|plan|manual), `maxTurns`, `skills` (preloads full content),
 `mcpServers`, `hooks` (Stop → SubagentStop), `memory` (user|project|local),
 `background` (default true since v2.1.198), `effort`, `isolation: worktree`,
-`color` (red|blue|green|yellow|purple|orange|pink|cyan), `initialPrompt`.
+`color` (red|blue|green|yellow|purple|orange|pink|cyan), `initialPrompt`,
+`omitClaudeMd` (2.1.271; skip user/project/local CLAUDE.md), and
+`experimental.cacheTtl` (5m|1h, 2.1.248). Re-verified 2026-10-03 against
+2.1.288: `isolation` accepts worktree|remote (binary; docs list only
+worktree); `effort` also takes an integer; `permissionMode: manual` is an
+alias for `default`; `background`/`omitClaudeMd` accept only true/false (bool
+or string) — NOT the skill yes/no/on/off spellings. Undocumented binary-only
+keys, modeled as optional: `observer` (non-blank agent type, trimmed),
+`observerMessage` (string), `observeSubagents` (true/false; only false acts).
+Skill schema @internal keys NOT modeled (Claude writes them; not
+author-facing): `version`, `fallback`, `created_by`, `improved_by`, and
+untyped plugin-manifest keys (`lspServers`, `themes`, `workflows`, …).
 Precedence: managed > `--agents` flag > project > user > plugin.
 
 **MCP** (`mcpServers` in `~/.claude.json` user/local scope, `.mcp.json`
@@ -65,10 +92,35 @@ present, enforced since ~v2.1.202), `command`, `args`, `env`, `url`,
 `oauth` (`clientId`, `callbackPort`, `authServerMetadataUrl`, `scopes`).
 `${VAR}` and `${VAR:-default}` expansion. No per-entry `tools` filter key.
 
-**Hooks**: ~30 events (Session/turn/tool/agent-team/file/context/notification/
-MCP families); handler types `command`, `http`, `mcp_tool`, `prompt`,
-`agent`. Skill/agent frontmatter `hooks:` uses the same schema, scoped to the
-component's lifetime.
+**Hooks** (re-verified 2026-10-03 against Claude Code 2.1.288 — docs
+lifecycle table, binary strings, CHANGELOG): 33 events — the 11 shared with
+Codex plus `Setup`, `UserPromptExpansion`, `StopFailure`, `PostToolBatch`,
+`PermissionDenied`, `PostToolUseFailure`, `TeammateIdle`, `TaskCreated`,
+`TaskCompleted`, `InstructionsLoaded`, `ConfigChange`, `CwdChanged`,
+`DirectoryAdded`, `FileChanged`, `WorktreeCreate`, `WorktreeRemove`,
+`Notification`, `MessageDisplay`, `Elicitation`, `ElicitationResult`,
+`PreModelSwitch`, `PostModelSwitch` (the last two added in 2.1.251). No
+`Interrupt`. Handler types `command`, `http`, `mcp_tool`, `prompt`, `agent`
+(experimental; no longer runs on `PermissionRequest` since 2.1.280). Common
+handler fields: `type`, `if` (permission-rule syntax, tool events), `timeout`
+(s; default 600, 30 prompt, 60 agent, 30 on UserPromptSubmit/*ModelSwitch, 10
+on MessageDisplay), `statusMessage`, `once` (skills only). command: `command`,
+`args` (exec form, no shell), `async`, `asyncRewake`, `shell`. http: `url`,
+`headers`, `allowedEnvVars`. mcp_tool: `server`, `tool`, `input`. prompt/agent:
+`prompt`, `model`. No matcher support on `UserPromptSubmit`, `PostToolBatch`,
+`Stop`, `TeammateIdle`, `TaskCreated`, `TaskCompleted`, `WorktreeCreate`,
+`WorktreeRemove`, `MessageDisplay`, `CwdChanged`. Skill/agent frontmatter `hooks:` uses the same schema, scoped to the
+component's lifetime (agent schema: `hooks: <settings hooks schema>`, VERIFIED
+in the 2.1.288 binary). Handler schema as transcribed from the 2.1.288
+binary's Zod definitions (`src/hook-schema.ts` mirrors it): event keys are a
+`partialRecord` over the event enum (unknown events rejected); entry
+`{matcher?, hooks: [discriminated on type]}`; handler objects strip unknown
+keys. Every type has `if`, `timeout` (positive number, seconds),
+`statusMessage`, `once`. command: `command`, `args`, `shell`, `async`,
+`asyncRewake`, @internal `rewakeMessage`/`rewakeSummary`/`cloud`
+(device|skip). prompt: `prompt`, `model`, `continueOnBlock`. mcp_tool:
+`server`, `tool`, `input`. http: `url` (URL), `headers`, `allowedEnvVars`,
+@internal `cloud`. agent: `prompt`, `model`.
 
 **Memory**: `CLAUDE.md` chain (managed → `~/.claude/CLAUDE.md` → project →
 `CLAUDE.local.md`), `@path` imports (depth 4), `.claude/rules/*.md` +
@@ -78,11 +130,17 @@ directly (import or symlink it).
 ## Codex CLI (0.146.x)
 
 **Skills**: `SKILL.md` frontmatter `name` + `description` (required),
-`metadata`, `arguments`, `allowed-tools` (documented). No body substitution
+`metadata`, `arguments`, `allowed-tools` (documented). Per codex-rs
+`skills/src/parser.rs` at 0.160.0, Codex only consumes `name`, `description`,
+and `metadata.short-description`; other keys are tolerated. Skill `model`
+was removed in 0.149.0 (#39068). No body substitution
 or inline-shell preprocessing (still true). Optional `agents/openai.yaml`:
 `interface` (`display_name`, `short_description`, `icon_small`, `icon_large`,
 `brand_color`, `default_prompt`), `policy.allow_implicit_invocation`
-(default true), `dependencies` (MCP server requirements). Discovery:
+(default true), `policy.products` (chatgpt|codex|atlas, plus uppercase aliases; source-only,
+undocumented), `dependencies.tools[]` (`type`, `value` required;
+`description`, `transport`, `url`, `command`, `oauth.callbackPort`). Parse
+failures make Codex ignore the file with a warning. Discovery:
 `$CWD/.agents/skills` → parents → `$REPO_ROOT/.agents/skills` →
 `~/.agents/skills` → `/etc/codex/skills` → built-ins, PLUS legacy
 `~/.codex/skills`. Per-skill enable/disable via config.toml `skills.config`.
@@ -90,8 +148,13 @@ or inline-shell preprocessing (still true). Optional `agents/openai.yaml`:
 **Agents** (`~/.codex/agents/*.toml`, project `.codex/agents/*.toml`;
 registry `[agents.<name>]` in config.toml with `description`/`config_file`):
 `name`, `description`, `developer_instructions` (multiline string), `model`,
-`model_reasoning_effort`, `model_verbosity`, `sandbox_mode` (read-only|
-workspace-write|danger-full-access), and per-agent `mcp_servers`,
+`model_reasoning_effort` (model-dependent non-empty string — none, minimal,
+low, medium, high, xhigh, max, ultra, … — not an enum), `model_verbosity`
+(low|medium|high), `sandbox_mode` (read-only|workspace-write|
+danger-full-access), `nickname_candidates` (verified in codex-rs
+`agent_role_config.rs` at 0.160.0, undocumented: non-empty, unique after
+trim, ASCII alphanumerics/space/-/_). Agent files use `deny_unknown_fields`
+with any config.toml key flattened in, and per-agent `mcp_servers`,
 `skills.config`, `tools`, `hooks` tables (documented; schemas match the
 global config forms, NOT Claude's same-named frontmatter). Global `[agents]`:
 `max_threads`/`max_concurrent_threads_per_session`, `enabled`, `max_depth`,

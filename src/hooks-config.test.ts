@@ -89,6 +89,28 @@ describe('checkHooksSource', () => {
     expect(report.join('\n')).toContain('`FileChanged` is Claude-only');
   });
 
+  it('accepts the model-switch events for claude', () => {
+    expect(
+      messages(
+        'hooks:\n  PreModelSwitch:\n    - command: x\n      targets: [claude]\n  PostModelSwitch:\n    - command: y\n      targets: [claude]\n',
+      ),
+    ).toEqual([]);
+  });
+
+  it('errors on Codex-only events without a targets restriction', () => {
+    const report = messages('hooks:\n  Interrupt:\n    - command: x\n');
+    expect(report).toContain(
+      'error: hook event `Interrupt` is Codex-only — add `targets: [codex]` to the `x` hook',
+    );
+    expect(report.join('\n')).not.toContain('Claude-only');
+  });
+
+  it('accepts Codex-only events restricted to codex', () => {
+    expect(messages('hooks:\n  Interrupt:\n    - command: x\n      targets: [codex]\n')).toEqual([
+      'warning: syncing hooks rewrites Codex hook config — Codex will require re-trusting them via /hooks',
+    ]);
+  });
+
   it('emits no re-trust warning for claude-only sources', () => {
     expect(messages('hooks:\n  FileChanged:\n    - command: x\n      targets: [claude]\n')).toEqual(
       [],

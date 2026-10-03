@@ -3,52 +3,7 @@ import { z } from 'zod';
 
 import type { Issue } from './doctor.js';
 import { isMapping, type Target } from './frontmatter.js';
-
-/**
- * The lifecycle events Codex supports (verified against the official hooks
- * doc and live hooks.json files). All of them also exist in Claude Code.
- */
-export const CODEX_HOOK_EVENTS = new Set([
-  'SessionStart',
-  'SessionEnd',
-  'PreToolUse',
-  'PermissionRequest',
-  'PostToolUse',
-  'UserPromptSubmit',
-  'Stop',
-  'PreCompact',
-  'PostCompact',
-  'SubagentStart',
-  'SubagentStop',
-]);
-
-/**
- * Claude-only events (beyond the shared set above) that a hook may target
- * with `targets: [claude]`. Kept to the documented list so doctor can catch
- * typos in event names.
- */
-export const CLAUDE_ONLY_HOOK_EVENTS = new Set([
-  'Setup',
-  'UserPromptExpansion',
-  'StopFailure',
-  'PostToolBatch',
-  'PermissionDenied',
-  'PostToolUseFailure',
-  'TeammateIdle',
-  'TaskCreated',
-  'TaskCompleted',
-  'InstructionsLoaded',
-  'ConfigChange',
-  'CwdChanged',
-  'DirectoryAdded',
-  'FileChanged',
-  'WorktreeCreate',
-  'WorktreeRemove',
-  'Notification',
-  'MessageDisplay',
-  'Elicitation',
-  'ElicitationResult',
-]);
+import { CLAUDE_HOOK_EVENTS, CODEX_HOOK_EVENTS, supportsHookEvent } from './hook-schema.js';
 
 const hookSchema = z.object({
   matcher: z.string().optional(),
@@ -119,7 +74,7 @@ export function checkHooksSource(source: HooksSource): Issue[] {
   const issues: Issue[] = [];
 
   for (const [event, definitions] of Object.entries(source.hooks)) {
-    const knownEvent = CODEX_HOOK_EVENTS.has(event) || CLAUDE_ONLY_HOOK_EVENTS.has(event);
+    const knownEvent = CLAUDE_HOOK_EVENTS.has(event) || CODEX_HOOK_EVENTS.has(event);
     if (!knownEvent) {
       issues.push({
         severity: 'error',
@@ -129,11 +84,15 @@ export function checkHooksSource(source: HooksSource): Issue[] {
     }
 
     for (const definition of definitions) {
-      const targets = hookTargets(definition);
-      if (targets.includes('codex') && !CODEX_HOOK_EVENTS.has(event)) {
+      const unsupported = hookTargets(definition).find(
+        (target) => !supportsHookEvent(target, event),
+      );
+      if (unsupported !== undefined) {
+        const [owner, ownerTarget] =
+          unsupported === 'codex' ? ['Claude', 'claude'] : ['Codex', 'codex'];
         issues.push({
           severity: 'error',
-          message: `hook event \`${event}\` is Claude-only — add \`targets: [claude]\` to the \`${definition.command}\` hook`,
+          message: `hook event \`${event}\` is ${owner}-only — add \`targets: [${ownerTarget}]\` to the \`${definition.command}\` hook`,
         });
       }
     }

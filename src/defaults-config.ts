@@ -19,8 +19,8 @@ export const defaultsSourceSchema = z.object({
   codex: z
     .object({
       model: z.string().optional(),
-      model_reasoning_effort: z.string().optional(),
-      model_verbosity: z.string().optional(),
+      model_reasoning_effort: z.string().min(1).optional(),
+      model_verbosity: z.enum(['low', 'medium', 'high']).optional(),
     })
     .optional(),
 });

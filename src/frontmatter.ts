@@ -1,10 +1,37 @@
 import { parse, stringify } from 'yaml';
 import { z } from 'zod';
 
+import { claudeHookSettingsSchema } from './hook-schema.js';
+
 /** The two tools this package compiles skills for. */
 export type Target = 'claude' | 'codex';
 
 const stringOrStringList = z.union([z.string(), z.array(z.string())]);
+
+const CLAUDE_TRUE_SPELLINGS = new Set(['1', 'true', 'yes', 'on']);
+const CLAUDE_FALSE_SPELLINGS = new Set(['0', 'false', 'no', 'off']);
+
+/**
+ * A skill boolean as Claude Code reads it (2.1.218+): a native boolean or
+ * `1`/`true`/`yes`/`on` and `0`/`false`/`no`/`off`, trimmed and
+ * case-insensitive. Normalized to a real boolean so every consumer, and the
+ * emitted output, sees `true`/`false`.
+ */
+const claudeSkillBoolean = z.preprocess((value) => {
+  if (typeof value !== 'string' && typeof value !== 'number') return value;
+
+  const spelling = String(value).trim().toLowerCase();
+  if (CLAUDE_TRUE_SPELLINGS.has(spelling)) return true;
+  if (CLAUDE_FALSE_SPELLINGS.has(spelling)) return false;
+
+  return value;
+}, z.boolean());
+
+/** Claude Code effort: a named level or an integer budget. */
+export const claudeEffortSchema = z.union([
+  z.enum(['low', 'medium', 'high', 'xhigh', 'max']),
+  z.number().int(),
+]);
 
 const openaiInterfaceSchema = z.object({
   display_name: z.string().optional(),
@@ -21,11 +48,26 @@ const openaiToolDependencySchema = z.object({
   description: z.string().optional(),
   transport: z.string().optional(),
   url: z.string().optional(),
+  command: z.string().optional(),
+  oauth: z
+    .object({
+      callbackPort: z.number().int().min(1).max(65_535).optional(),
+      callback_port: z.number().int().min(1).max(65_535).optional(),
+    })
+    .optional(),
 });
 
 const openaiSchema = z.object({
   interface: openaiInterfaceSchema.optional(),
-  policy: z.object({ allow_implicit_invocation: z.boolean().optional() }).optional(),
+  policy: z
+    .object({
+      allow_implicit_invocation: z.boolean().optional(),
+      // Codex's `Product` enum also declares uppercase aliases.
+      products: z
+        .array(z.enum(['chatgpt', 'codex', 'atlas', 'CHATGPT', 'CODEX', 'ATLAS']))
+        .optional(),
+    })
+    .optional(),
   dependencies: z.object({ tools: z.array(openaiToolDependencySchema).optional() }).optional(),
 });
 
@@ -50,15 +92,17 @@ export const skillFrontmatterSchema = z.object({
   when_to_use: z.string().optional(),
   'argument-hint': z.string().optional(),
   arguments: stringOrStringList.optional(),
-  'disable-model-invocation': z.boolean().optional(),
-  'user-invocable': z.boolean().optional(),
+  'disable-model-invocation': claudeSkillBoolean.optional(),
+  'user-invocable': claudeSkillBoolean.optional(),
   'disallowed-tools': stringOrStringList.optional(),
+  // Undocumented alias Claude Code's own schema accepts for `disallowed-tools`.
+  disallowedTools: stringOrStringList.optional(),
   model: z.string().optional(),
-  effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).optional(),
-  context: z.string().optional(),
+  effort: claudeEffortSchema.optional(),
+  context: z.enum(['inline', 'fork']).optional(),
   agent: z.string().optional(),
-  background: z.boolean().optional(),
-  hooks: z.record(z.string(), z.unknown()).optional(),
+  background: claudeSkillBoolean.optional(),
+  hooks: claudeHookSettingsSchema.optional(),
   paths: stringOrStringList.optional(),
   shell: z.enum(['bash', 'powershell']).optional(),
 
@@ -78,6 +122,7 @@ const CLAUDE_ONLY_KEYS = [
   'disable-model-invocation',
   'user-invocable',
   'disallowed-tools',
+  'disallowedTools',
   'model',
   'effort',
   'context',

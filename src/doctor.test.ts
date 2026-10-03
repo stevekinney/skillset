@@ -228,3 +228,43 @@ describe('checkAgents', () => {
     expect(hasErrors(reports)).toBe(true);
   });
 });
+
+const skillHooks = (hooks: string): string =>
+  `---\nname: good-skill\ndescription: Does a thing.\nhooks:\n${hooks}\n---\n\nBody.\n`;
+const agentHooks = (hooks: string): string =>
+  `---\nname: reviewer\ndescription: Reviews diffs.\nhooks:\n${hooks}\n---\n\nYou review.\n`;
+
+describe('frontmatter hooks', () => {
+  it('accepts typed skill and agent hooks', () => {
+    const hooks =
+      '  PostToolUse:\n    - matcher: Edit\n      hooks:\n        - type: command\n          command: ./format.sh\n          once: true';
+    expect(messages(skill(skillHooks(hooks)))).toEqual([]);
+    expect(agentMessages(agent(agentHooks(hooks)))).toContain(
+      'warning: `hooks` is not auto-translated — Codex agents support their own `hooks` table with a different schema; set `codex.hooks` explicitly',
+    );
+  });
+
+  it('rejects unknown events and malformed handlers', () => {
+    expect(
+      messages(
+        skill(
+          skillHooks('  OnSneeze:\n    - hooks:\n        - type: command\n          command: x'),
+        ),
+      )[0],
+    ).toContain('error: invalid frontmatter — hooks.OnSneeze');
+    expect(
+      agentMessages(agent(agentHooks('  Stop:\n    - hooks:\n        - type: http')))[0],
+    ).toContain('error: invalid frontmatter — hooks.Stop.0.hooks.0.url');
+  });
+
+  it('warns about hook fields Claude Code ignores', () => {
+    const hooks =
+      '  Stop:\n    - hooks:\n        - type: command\n          command: x\n          comand: y';
+    expect(messages(skill(skillHooks(hooks)))).toEqual([
+      'warning: unknown hook field `hooks.Stop[0].hooks[0].comand` — Claude Code ignores it',
+    ]);
+    expect(agentMessages(agent(agentHooks(hooks)))).toContain(
+      'warning: unknown hook field `hooks.Stop[0].hooks[0].comand` — Claude Code ignores it',
+    );
+  });
+});

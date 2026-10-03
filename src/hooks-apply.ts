@@ -5,13 +5,8 @@ import {
   type EmbeddedAction,
 } from './config-files.js';
 import { isMapping, type Target } from './frontmatter.js';
-import {
-  CODEX_HOOK_EVENTS,
-  hookEntry,
-  hookName,
-  hookTargets,
-  type HooksSource,
-} from './hooks-config.js';
+import { supportsHookEvent } from './hook-schema.js';
+import { hookEntry, hookName, hookTargets, type HooksSource } from './hooks-config.js';
 import {
   embeddedKey,
   forgetItem,
@@ -47,7 +42,7 @@ export function plannedHooks(source: HooksSource, target: Target): PlannedHook[]
   for (const [event, definitions] of Object.entries(source.hooks)) {
     for (const [index, definition] of definitions.entries()) {
       if (!hookTargets(definition).includes(target)) continue;
-      if (target === 'codex' && !CODEX_HOOK_EVENTS.has(event)) continue;
+      if (!supportsHookEvent(target, event)) continue;
 
       planned.push({
         event,

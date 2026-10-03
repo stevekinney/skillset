@@ -70,6 +70,7 @@ bun run package:check    # Run publint + @arethetypeswrong/cli on packed tarball
 - `fallback.ts` — Codex-only prose rewrites of Claude dynamic features.
 - `emit.ts` — skill compilation (frontmatter + body + generated marker + openai.yaml).
 - `doctor.ts` — skill and agent validation; errors block sync.
+- `hook-schema.ts` — both tools' hook event sets and Claude Code's hook settings schema (used by skill/agent frontmatter `hooks`).
 - `mcp-config.ts` / `hooks-config.ts` / `defaults-config.ts` — the three single-file source schemas and their per-target mappings.
 - `mcp-apply.ts` / `hooks-apply.ts` / `defaults-apply.ts` — surgical application to the shared config files, entry-level ledger ownership, backups.
 - `config-files.ts` — shared JSON config read/write + backup helpers and the `EmbeddedAction` type.
