@@ -62,7 +62,10 @@ const openaiSchema = z.object({
   policy: z
     .object({
       allow_implicit_invocation: z.boolean().optional(),
-      products: z.array(z.enum(['chatgpt', 'codex', 'atlas'])).optional(),
+      // Codex's `Product` enum also declares uppercase aliases.
+      products: z
+        .array(z.enum(['chatgpt', 'codex', 'atlas', 'CHATGPT', 'CODEX', 'ATLAS']))
+        .optional(),
     })
     .optional(),
   dependencies: z.object({ tools: z.array(openaiToolDependencySchema).optional() }).optional(),

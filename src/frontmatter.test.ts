@@ -198,6 +198,12 @@ describe('current Claude Code and Codex skill fields', () => {
       },
     });
     expect(() => parseSkillFile(skill('openai:\n  policy:\n    products: [slack]'))).toThrow();
+    expect(
+      openaiConfiguration(
+        parseSkillFile(skill('openai:\n  policy:\n    products: [CHATGPT, CODEX, ATLAS]'))
+          .frontmatter,
+      ),
+    ).toEqual({ policy: { products: ['CHATGPT', 'CODEX', 'ATLAS'] } });
   });
 });
 
