@@ -158,7 +158,7 @@ was removed in 0.149.0 (#39068). No body substitution
 or inline-shell preprocessing (still true). Optional `agents/openai.yaml`:
 `interface` (`display_name`, `short_description`, `icon_small`, `icon_large`,
 `brand_color`, `default_prompt`), `policy.allow_implicit_invocation`
-(default true), `policy.products` (chatgpt|codex|atlas; source-only,
+(default true), `policy.products` (chatgpt|codex|atlas, plus uppercase aliases; source-only,
 undocumented), `dependencies.tools[]` (`type`, `value` required;
 `description`, `transport`, `url`, `command`, `oauth.callbackPort`). Parse
 failures make Codex ignore the file with a warning. Discovery:
