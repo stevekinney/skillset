@@ -70,9 +70,13 @@ bun run package:check    # Run publint + @arethetypeswrong/cli on packed tarball
 - `fallback.ts` — Codex-only prose rewrites of Claude dynamic features.
 - `emit.ts` — skill compilation (frontmatter + body + generated marker + openai.yaml).
 - `doctor.ts` — skill and agent validation; errors block sync.
-- `hook-schema.ts` — both tools' hook event sets and Claude Code's hook settings schema (used by skill/agent frontmatter `hooks`).
+- `hook-schema.ts` — both tools' hook event sets, Claude Code's hook settings schema (skill/agent frontmatter `hooks`), and Codex's hook handler and settings schema (`hooks.yaml` doctor, `codex.hooks`).
+- `agent-codex-checks.ts` — doctor checks for the agent `codex.hooks`/`codex.skills`/`codex.tools` tables.
+- `codex-agent-tables.ts` — Codex's `[skills]` and `[tools]` tables for the agent `codex:` block, plus their doctor helpers.
+- `mcp-schema.ts` — Claude Code's MCP server entry schema, Codex's `[mcp_servers.<name>]` schema, and the subagent `mcpServers` item schema (used by `mcp-servers.yaml` override blocks, agent frontmatter, and doctor).
 - `mcp-config.ts` / `hooks-config.ts` / `defaults-config.ts` — the three single-file source schemas and their per-target mappings.
 - `mcp-apply.ts` / `hooks-apply.ts` / `defaults-apply.ts` — surgical application to the shared config files, entry-level ledger ownership, backups.
+- `claude-hook-shared.ts` / `claude-hook-input-schemas.ts` / `claude-hook-output-schemas.ts` / `codex-hook-payloads.ts` — public Zod schemas for every hook event's stdin input and stdout output (inputs loose, Codex outputs strict), with `parse*HookInput`/`parse*HookOutput` helpers; exported from `index.ts` for hook authors.
 - `config-files.ts` — shared JSON config read/write + backup helpers and the `EmbeddedAction` type.
 - `toml-splice.ts` — comment-preserving `[section]` and top-level-scalar splicing for `config.toml`.
 - `import.ts` — reverse-compiles installed skills/agents/instructions into sources.

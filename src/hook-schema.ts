@@ -124,6 +124,9 @@ const claudeHandlerSchemas = {
   }),
 };
 
+/** Hook handler types Claude Code runs. */
+export const CLAUDE_HANDLER_TYPES: ReadonlySet<string> = new Set(Object.keys(claudeHandlerSchemas));
+
 const claudeHookEntrySchema = z.looseObject({
   matcher: z.string().optional(),
   hooks: z.array(
@@ -173,4 +176,196 @@ export function unknownClaudeHookFields(settings: ClaudeHookSettings): string[] 
   }
 
   return unknown;
+}
+
+/** A problem found while validating a hook handler object. */
+export type HandlerProblem = { path: PropertyKey[]; message: string };
+
+function schemaProblems(schema: z.ZodType, value: unknown): HandlerProblem[] {
+  const result = schema.safeParse(value);
+  if (result.success) return [];
+
+  return result.error.issues.map((issue) => ({ path: issue.path, message: issue.message }));
+}
+
+function handlerType(handler: Record<string, unknown>): string {
+  return typeof handler['type'] === 'string' ? handler['type'] : 'command';
+}
+
+const CLAUDE_HANDLER_SCHEMAS = new Map<string, z.ZodObject>(Object.entries(claudeHandlerSchemas));
+
+/** Validate one handler object against Claude Code's schema for its `type`. */
+export function claudeHandlerProblems(handler: Record<string, unknown>): HandlerProblem[] {
+  const type = handlerType(handler);
+  const schema = CLAUDE_HANDLER_SCHEMAS.get(type);
+  if (!schema) return [{ path: ['type'], message: `unknown handler type \`${type}\`` }];
+
+  return schemaProblems(schema, handler);
+}
+
+/** Fields of a Claude handler object that Claude Code does not read. */
+export function unknownClaudeHandlerFields(handler: Record<string, unknown>): string[] {
+  const schema = CLAUDE_HANDLER_SCHEMAS.get(handlerType(handler));
+  if (!schema) return [];
+
+  return Object.keys(handler).filter((field) => !(field in schema.shape));
+}
+
+// Codex 0.160.0's hook handler schema (verified October 2026 against
+// hook_config.rs and discovery.rs at rust-v0.160.0). Handlers are loose
+// because Codex ignores unknown handler keys; doctor reports them. `prompt`
+// and `agent` handlers parse and are then skipped with a load-failure warning,
+// so they are modelled as bare types that Codex never runs.
+const codexTimeout = z.number().int().min(0).optional();
+
+const codexHandlerSchemas = {
+  command: z.looseObject({
+    type: z.literal('command'),
+    command: z.string().min(1),
+    commandWindows: z.string().optional(),
+    command_windows: z.string().optional(),
+    timeout: codexTimeout,
+    statusMessage: z.string().optional(),
+    async: z.boolean().optional(),
+    additionalContextLimit: z.number().int().min(0).optional(),
+  }),
+  mcp_tool: z.looseObject({
+    type: z.literal('mcp_tool'),
+    server: z.string().min(1),
+    tool: z.string().min(1),
+    input: z.record(z.string(), z.unknown()).optional(),
+    timeout: codexTimeout,
+    statusMessage: z.string().optional(),
+  }),
+  prompt: z.looseObject({ type: z.literal('prompt') }),
+  agent: z.looseObject({ type: z.literal('agent') }),
+};
+
+/** Hook handler types Codex parses, whether or not it runs them. */
+export const CODEX_HANDLER_TYPES: ReadonlySet<string> = new Set(Object.keys(codexHandlerSchemas));
+
+/** Handler types Codex parses and then skips with a load-failure warning. */
+export const CODEX_SKIPPED_HANDLER_TYPES: ReadonlySet<string> = new Set(['prompt', 'agent']);
+
+/** Whether Codex actually runs a handler type. */
+export function codexRunsHandlerType(type: string): boolean {
+  return CODEX_HANDLER_TYPES.has(type) && !CODEX_SKIPPED_HANDLER_TYPES.has(type);
+}
+
+/** Whether Claude Code runs a handler type. */
+export function claudeRunsHandlerType(type: string): boolean {
+  return CLAUDE_HANDLER_TYPES.has(type);
+}
+
+const CODEX_HANDLER_SCHEMAS = new Map<string, z.ZodObject>(Object.entries(codexHandlerSchemas));
+
+/** Validate one handler object against Codex's schema for its `type`. */
+export function codexHandlerProblems(handler: Record<string, unknown>): HandlerProblem[] {
+  const schema = CODEX_HANDLER_SCHEMAS.get(handlerType(handler));
+
+  return schema ? schemaProblems(schema, handler) : [];
+}
+
+/** Fields of a Codex handler object that Codex does not read. */
+export function unknownCodexHandlerFields(handler: Record<string, unknown>): string[] {
+  const type = handlerType(handler);
+  const schema = CODEX_HANDLER_SCHEMAS.get(type);
+  // A skipped handler never runs, so its fields are not worth reporting one by one.
+  if (!schema || CODEX_SKIPPED_HANDLER_TYPES.has(type)) return [];
+
+  return Object.keys(handler).filter((field) => !(field in schema.shape));
+}
+
+// An unrecognised `type` is not a schema error: Codex most likely rejects it
+// (an internally tagged enum), but that is inferred rather than verified, so
+// doctor raises a hedged warning instead.
+const codexHandlerSchema = z.looseObject({ type: z.string() }).superRefine((handler, context) => {
+  for (const problem of codexHandlerProblems(handler)) {
+    context.addIssue({ code: 'custom', path: problem.path, message: problem.message });
+  }
+});
+
+const codexMatcherGroupSchema = z.looseObject({
+  matcher: z.string().nullish(),
+  hooks: z.array(codexHandlerSchema).optional(),
+});
+
+const codexEventTables = Object.fromEntries(
+  [...CODEX_HOOK_EVENTS].map((event) => [event, z.array(codexMatcherGroupSchema).optional()]),
+);
+
+const CODEX_GROUP_FIELDS = new Set(Object.keys(codexMatcherGroupSchema.shape));
+
+/**
+ * Codex's `[hooks]` table (config.toml, hooks.json, and agent role files): one
+ * array of matcher groups per PascalCase event, plus an optional `state` table
+ * of per-hook trust records.
+ */
+export const codexHookSettingsSchema = z.looseObject({
+  ...codexEventTables,
+  state: z
+    .record(
+      z.string(),
+      z.looseObject({ enabled: z.boolean().optional(), trusted_hash: z.string().optional() }),
+    )
+    .optional(),
+});
+
+/** A validated Codex hook settings table. */
+export type CodexHookSettings = z.infer<typeof codexHookSettingsSchema>;
+
+/** What doctor can say about a Codex hook settings table beyond its schema. */
+export type CodexHookFindings = {
+  /** Paths of fields or events Codex does not read. */
+  unknownFields: string[];
+  /** Paths of handlers whose `type` Codex does not recognise. */
+  unknownTypes: string[];
+  /** Paths of `prompt` and `agent` handlers, which Codex parses and skips. */
+  skippedHandlers: string[];
+};
+
+const codexMatcherGroupsSchema = z.array(codexMatcherGroupSchema);
+
+function handlerFindings(
+  handler: { type: string },
+  path: string,
+  findings: CodexHookFindings,
+): void {
+  if (!CODEX_HANDLER_TYPES.has(handler.type)) findings.unknownTypes.push(path);
+  if (CODEX_SKIPPED_HANDLER_TYPES.has(handler.type)) findings.skippedHandlers.push(path);
+  for (const field of unknownCodexHandlerFields(handler)) {
+    findings.unknownFields.push(`${path}.${field}`);
+  }
+}
+
+function groupFindings(
+  group: z.infer<typeof codexMatcherGroupSchema>,
+  path: string,
+  findings: CodexHookFindings,
+): void {
+  for (const field of Object.keys(group)) {
+    if (!CODEX_GROUP_FIELDS.has(field)) findings.unknownFields.push(`${path}.${field}`);
+  }
+  for (const [index, handler] of (group.hooks ?? []).entries()) {
+    handlerFindings(handler, `${path}.hooks[${index}]`, findings);
+  }
+}
+
+/** Walk a Codex hook settings table for fields and handlers Codex ignores or skips. */
+export function codexHookFindings(settings: CodexHookSettings): CodexHookFindings {
+  const findings: CodexHookFindings = { unknownFields: [], unknownTypes: [], skippedHandlers: [] };
+
+  for (const [key, value] of Object.entries(settings)) {
+    if (!CODEX_HOOK_EVENTS.has(key)) {
+      if (key !== 'state') findings.unknownFields.push(`hooks.${key}`);
+      continue;
+    }
+
+    // Already validated by the settings schema; parsing again only narrows the type.
+    for (const [index, group] of codexMatcherGroupsSchema.parse(value).entries()) {
+      groupFindings(group, `hooks.${key}[${index}]`, findings);
+    }
+  }
+
+  return findings;
 }

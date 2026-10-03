@@ -27,6 +27,15 @@ describe('parseDefaultsSource', () => {
     expect(() => parseDefaultsSource('- a\n')).toThrow('YAML mapping');
     expect(() => parseDefaultsSource('claude:\n  effort: extreme\n')).toThrow();
   });
+
+  it('accepts exactly what settings.json effortLevel accepts', () => {
+    for (const effort of ['low', 'medium', 'high', 'xhigh'] as const) {
+      expect(parseDefaultsSource(`claude:\n  effort: ${effort}\n`).claude?.effort).toBe(effort);
+    }
+    for (const effort of ['max', '5', 'ultracode']) {
+      expect(() => parseDefaultsSource(`claude:\n  effort: ${effort}\n`)).toThrow();
+    }
+  });
 });
 
 describe('entries', () => {

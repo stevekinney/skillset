@@ -3,6 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import {
   checkHooksSource,
   hookEntry,
+  hookHandler,
   hookName,
   hookTargets,
   parseHooksSource,
@@ -41,7 +42,7 @@ describe('hookTargets and hookName', () => {
     const source = parseHooksSource(raw);
     expect(hookTargets(source.hooks['PreToolUse']![0]!)).toEqual(['claude', 'codex']);
     expect(hookName('PreToolUse', source.hooks['PreToolUse']![0]!, 0)).toBe('PreToolUse/Bash/0');
-    expect(hookName('Stop', { command: 'x' }, 2)).toBe('Stop/*/2');
+    expect(hookName('Stop', { type: 'command', command: 'x' }, 2)).toBe('Stop/*/2');
   });
 });
 
@@ -115,5 +116,135 @@ describe('checkHooksSource', () => {
     expect(messages('hooks:\n  FileChanged:\n    - command: x\n      targets: [claude]\n')).toEqual(
       [],
     );
+  });
+});
+
+describe('handler types', () => {
+  const source = `hooks:
+  PreToolUse:
+    - type: http
+      url: https://example.com/hook
+      headers: { Authorization: token }
+      allowedEnvVars: [TOKEN]
+      targets: [claude]
+    - type: mcp_tool
+      server: audit
+      tool: record
+      input: { event: start }
+    - type: prompt
+      prompt: Is this safe?
+      model: haiku
+      targets: [claude]
+    - type: agent
+      prompt: Verify the change
+      targets: [claude]
+  SessionEnd:
+    - type: mcp_tool
+      server: audit
+      tool: record
+      targets: [claude]
+`;
+
+  it('defaults a missing type to command and keeps every handler type', () => {
+    const parsed = parseHooksSource(source);
+    expect(parsed.hooks['PreToolUse']?.map((definition) => definition.type)).toEqual([
+      'http',
+      'mcp_tool',
+      'prompt',
+      'agent',
+    ]);
+    expect(parseHooksSource(raw).hooks['PreToolUse']?.[0]?.type).toBe('command');
+    expect(() =>
+      parseHooksSource('hooks:\n  Stop:\n    - type: shell\n      command: x\n'),
+    ).toThrow();
+    expect(() => parseHooksSource('hooks:\n  Stop:\n    - type: http\n')).toThrow();
+  });
+
+  it('builds a handler per type with overrides merged last', () => {
+    const [http, mcp, prompt, agent] = parseHooksSource(source).hooks['PreToolUse']!;
+    expect(hookEntry(http!, 'claude')).toEqual({
+      hooks: [
+        {
+          type: 'http',
+          url: 'https://example.com/hook',
+          headers: { Authorization: 'token' },
+          allowedEnvVars: ['TOKEN'],
+        },
+      ],
+    });
+    expect(hookEntry(mcp!, 'codex')).toEqual({
+      hooks: [{ type: 'mcp_tool', server: 'audit', tool: 'record', input: { event: 'start' } }],
+    });
+    expect(hookHandler(prompt!, 'claude')).toEqual({
+      type: 'prompt',
+      prompt: 'Is this safe?',
+      model: 'haiku',
+    });
+    expect(hookHandler(agent!, 'claude')['prompt']).toBe('Verify the change');
+  });
+
+  it('accepts every type on Claude and mcp_tool on Codex', () => {
+    expect(messages(source)).toEqual([
+      'warning: syncing hooks rewrites Codex hook config — Codex will require re-trusting them via /hooks',
+    ]);
+  });
+
+  it('errors when Codex is a target of a handler type it cannot run', () => {
+    const report = messages(
+      'hooks:\n  Stop:\n    - type: prompt\n      prompt: Check\n    - type: agent\n      prompt: Verify\n    - type: http\n      url: https://example.com\n',
+    );
+    expect(report).toContain(
+      'error: handler type `prompt` is skipped by Codex — add `targets: [claude]` to the `Check` hook',
+    );
+    expect(report).toContain(
+      'error: handler type `agent` is skipped by Codex — add `targets: [claude]` to the `Verify` hook',
+    );
+    expect(report).toContain(
+      'error: handler type `http` is not run by Codex — add `targets: [claude]` to the `https://example.com` hook',
+    );
+  });
+
+  it('errors on a Codex mcp_tool handler for SessionEnd', () => {
+    expect(
+      messages('hooks:\n  SessionEnd:\n    - type: mcp_tool\n      server: s\n      tool: t\n'),
+    ).toContain(
+      'error: Codex does not run `mcp_tool` handlers on `SessionEnd` — add `targets: [claude]` to the `s/t` hook',
+    );
+  });
+
+  it('reports an override that changes the handler type to an unknown one', () => {
+    const report = messages(
+      'hooks:\n  Stop:\n    - command: x\n      claude:\n        type: mystery\n      codex:\n        type: mystery\n',
+    );
+    expect(report).toContain(
+      'error: handler type `mystery` is not run by Claude — add `targets: [codex]` to the `x` hook',
+    );
+    expect(report).toContain(
+      'error: handler type `mystery` is not run by Codex — add `targets: [claude]` to the `x` hook',
+    );
+  });
+
+  it('validates each merged handler against its target schema', () => {
+    const report = messages(
+      'hooks:\n  Stop:\n    - command: x\n      claude:\n        shell: zsh\n      codex:\n        timeout: -1\n        async: maybe\n',
+    );
+    expect(report.some((line) => line.startsWith('error: hook `x` for Claude: `shell`'))).toBe(
+      true,
+    );
+    expect(report.some((line) => line.startsWith('error: hook `x` for Codex: `async`'))).toBe(true);
+  });
+
+  it('warns about fields a target does not read', () => {
+    const report = messages(
+      'hooks:\n  Stop:\n    - command: x\n      claude:\n        mystery: 1\n        if: Bash(ls)\n      codex:\n        if: Bash(ls)\n        commandWindows: x.cmd\n',
+    );
+    expect(report).toContain(
+      'warning: hook `x` for Claude has unknown field `mystery` — Claude ignores it',
+    );
+    expect(report).toContain(
+      'warning: hook `x` for Codex has unknown field `if` — Codex ignores it',
+    );
+    expect(report.join('\n')).not.toContain('commandWindows');
+    expect(report.join('\n')).not.toContain('field `if` — Claude');
   });
 });

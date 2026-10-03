@@ -5,6 +5,14 @@ import type { Issue } from './doctor.js';
 import { isMapping } from './frontmatter.js';
 
 /**
+ * What settings.json `effortLevel` accepts in Claude Code 2.1.288: exactly
+ * these four levels. `max`, integers, and `ultracode` are rejected, and Claude
+ * Code silently treats an invalid value as unset. Skill and subagent
+ * frontmatter `effort` is a different enum (it adds `max` and integers).
+ */
+export const claudeSettingsEffortSchema = z.enum(['low', 'medium', 'high', 'xhigh']);
+
+/**
  * The defaults.yaml source: model/effort defaults for each tool. Claude keys
  * land in settings.json (`model`, `effortLevel`); Codex keys land as
  * top-level config.toml scalars.
@@ -13,7 +21,7 @@ export const defaultsSourceSchema = z.object({
   claude: z
     .object({
       model: z.string().optional(),
-      effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).optional(),
+      effort: claudeSettingsEffortSchema.optional(),
     })
     .optional(),
   codex: z

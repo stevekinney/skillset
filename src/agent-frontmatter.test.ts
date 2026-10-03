@@ -133,3 +133,48 @@ describe('undocumented Claude Code agent fields', () => {
     expect(() => parseAgentFile(agent('observer: ""'))).toThrow();
   });
 });
+
+const frontmatterWith = (extra: string): string =>
+  `---\nname: a\ndescription: d\n${extra}\n---\nbody\n`;
+
+describe('mcp server typing', () => {
+  it('accepts server names and one-key inline entries', () => {
+    const parsed = parseAgentFile(
+      frontmatterWith(
+        'mcpServers:\n  - github\n  - playwright:\n      type: stdio\n      command: npx\n      args: ["-y", "x"]',
+      ),
+    );
+    expect(parsed.frontmatter.mcpServers).toEqual([
+      'github',
+      { playwright: { type: 'stdio', command: 'npx', args: ['-y', 'x'] } },
+    ]);
+  });
+
+  it('keeps invalid items so doctor can warn that Claude Code drops them', () => {
+    expect(
+      parseAgentFile(frontmatterWith('mcpServers:\n  - a:\n      type: http\n  - 5')).frontmatter
+        .mcpServers,
+    ).toEqual([{ a: { type: 'http' } }, 5]);
+  });
+
+  it('types codex.mcp_servers with the Codex schema', () => {
+    const parsed = parseAgentFile(
+      frontmatterWith(
+        'codex:\n  mcp_servers:\n    docs:\n      url: https://x\n      startup_readiness: catalog',
+      ),
+    );
+    expect(parsed.frontmatter.codex?.mcp_servers?.['docs']?.url).toBe('https://x');
+    expect(() =>
+      parseAgentFile(
+        frontmatterWith('codex:\n  mcp_servers:\n    docs:\n      command: x\n      url: y'),
+      ),
+    ).toThrow();
+    expect(() =>
+      parseAgentFile(
+        frontmatterWith(
+          'codex:\n  mcp_servers:\n    docs:\n      command: x\n      required: maybe',
+        ),
+      ),
+    ).toThrow();
+  });
+});

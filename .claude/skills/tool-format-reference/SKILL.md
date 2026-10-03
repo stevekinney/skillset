@@ -92,6 +92,27 @@ present, enforced since ~v2.1.202), `command`, `args`, `env`, `url`,
 `oauth` (`clientId`, `callbackPort`, `authServerMetadataUrl`, `scopes`).
 `${VAR}` and `${VAR:-default}` expansion. No per-entry `tools` filter key.
 
+Re-verified 2026-10-03 against Claude Code 2.1.288 (binary Zod schemas and
+code.claude.com/docs/en/mcp, sub-agents, settings, model-config). Per
+transport: `stdio` needs `command` (min length 1; `type` optional; `args`,
+`env`, `timeout`, `alwaysLoad`, `bareElicitationCapability`); `sse` and
+`http` (alias `streamable-http`) need `type` and `url` and also take
+`headers`, `headersHelper`, `oauth`, `timeout`, `tools`, `alwaysLoad`,
+`bareElicitationCapability`, `discoveryCache`, `toolPermissions`; `ws` needs
+`type` and `url`, takes no `oauth`. `oauth`: `clientId`, `callbackPort`
+(positive int), `authServerMetadataUrl` (https only), `scopes` (ONE
+space-separated string), `xaa`. Loader: `url` without `type` is skipped;
+`sdk`, `sse-ide`, `ws-ide` skipped from files; expansion covers `command`,
+`args`, `env` values, `url`, `headers` values, not `headersHelper`. Per-server
+`timeout` below 1000 ms is ignored. Unknown-key strip-vs-reject is UNVERIFIED
+(inferred strip), so unknown fields are doctor warnings, never errors.
+Subagent `mcpServers` items: a string, or a record of server name to full
+inline entry; exactly one key is enforced at load (invalid item dropped with a
+warning), not in the schema. settings.json `effortLevel` accepts exactly
+`low|medium|high|xhigh` (invalid value silently unset; `max`, integers,
+`ultracode` rejected) — a different enum from skill/subagent frontmatter
+`effort` (`low|medium|high|xhigh|max` or integer).
+
 **Hooks** (re-verified 2026-10-03 against Claude Code 2.1.288 — docs
 lifecycle table, binary strings, CHANGELOG): 33 events — the 11 shared with
 Codex plus `Setup`, `UserPromptExpansion`, `StopFailure`, `PostToolBatch`,
@@ -162,12 +183,101 @@ global config forms, NOT Claude's same-named frontmatter). Global `[agents]`:
 
 **MCP** (`[mcp_servers.<name>]` in config.toml): `command`, `args`, `env`
 (literal values), `env_vars` (names to forward), `cwd`, `url`, `auth`
-(oauth|chatgpt), `bearer_token_env_var`, `http_headers`, `env_http_headers`,
+(oauth|chatgpt|ema_auth), `bearer_token_env_var`, `http_headers`, `env_http_headers`,
 `startup_timeout_sec` (default 10), `tool_timeout_sec` (default 60),
 `enabled`, `required`, `enabled_tools`, `disabled_tools`,
 `default_tools_approval_mode` (auto|prompt|writes|approve), per-tool
 `[mcp_servers.<name>.tools.<tool>] approval_mode`, `oauth_resource`,
-`experimental_environment`. `codex mcp add|list|get|remove|login|logout`.
+`environment_id`. `codex mcp add|list|get|remove|login|logout`.
+
+Re-verified 2026-10-03 against codex-cli 0.160.0 (config.schema.json,
+mcp_types.rs at rust-v0.160.0). `command` selects stdio, `url` selects
+streamable HTTP, and cross-transport fields error: stdio rejects `url`,
+`bearer_token_env_var`, `http_headers`, `env_http_headers`,
+`http_headers_helper`, `oauth`, `oauth_resource`, `auth`; HTTP rejects `args`,
+`env`, `env_vars`, `cwd`; `bearer_token` is always rejected. 0.160 has NO
+`experimental_environment` — the field is `environment_id` (docs are stale;
+the runtime silently ignores unknown keys, the published JSON schema flags
+them). New since 0.147: `startup_readiness` (connection|catalog),
+`tool_input_schema_max_bytes`, `http_headers_helper`,
+`tools.<t>.output_token_limit`, `oauth.{client_secret,callback_url,callback_port,authorization_server_issuer}`;
+also `environment_id`, `omit_tools_from` (code_mode|deferred|direct),
+`supports_parallel_tool_calls`, `scopes`, `startup_timeout_ms`, `auth`
+(oauth|chatgpt|ema_auth), `env_vars` entries as a name or `{name, source}`.
+The `oauth` table, object-form `env_vars` entries, and `tools.<tool>` tables
+also reject unknown keys in the published schema (skillset warns with dotted
+paths such as `oauth.clientid`). Agent role files: `mcp_servers` and
+`sandbox_mode` are validated then DROPPED by role.rs (0.149+), so
+`codex.mcp_servers` and `codex.sandbox_mode` (including one implied by
+`permissionMode`) in an agent have no runtime effect in 0.160 even though the
+Codex docs still list them.
+
+**Codex hooks, skills, and tools tables** (re-verified 2026-10-03 against
+codex-cli 0.160.0: hook_config.rs, discovery.rs, skills_config.rs, role.rs,
+config.schema.json at rust-v0.160.0). `[hooks]` (also hooks.json, whose top
+level is strict `{description?, hooks}`): 12 PascalCase event tables of
+`{matcher?, hooks[]}` groups plus a `state` table (`{enabled?, trusted_hash?}`
+per hook key). Handler types: `command` (`command` required and non-blank,
+`commandWindows`/`command_windows`, `timeout` integer seconds, default 600 and
+1 to 3 for SessionEnd/Interrupt, `statusMessage`, `async` forced sync on
+SessionEnd, `additionalContextLimit`) and `mcp_tool` (`server`, `tool`,
+`input`, `timeout`, `statusMessage`; not run on SessionEnd). `prompt` and
+`agent` parse (extra keys ignored) and are then skipped with a load-failure
+warning, so Codex never runs them. Unknown handler keys are ignored. An
+unknown handler `type` is INFERRED to be a parse error (serde tagged enum), so
+doctor only warns. `[skills]`: `bundled.enabled`, `include_instructions`,
+`max_context_tokens`, `[[skills.config]]` rules of `{path|name, enabled}`
+(`enabled` required; exactly-one-of `path`/`name` is INFERRED, not enforced by
+the schema). `[tools]` is a strict table, not an allowlist:
+`experimental_request_user_input.enabled`, `update_plan.enabled`,
+`web_search.{allowed_domains,context_size,location}`; there is no per-agent
+tool allowlist array. In a role file all three are validated against
+`ConfigToml`, but role.rs projects only restrictive skills entries
+(`enabled = false`, disabled bundled set, `include_instructions = false`);
+`hooks` and `tools` are dropped (role_tests hostile-role test).
+
+**Hook payloads** (verified 2026-10-03 against Claude Code 2.1.288: binary
+Zod schemas plus code.claude.com/docs/en/hooks; codex-cli 0.160.0:
+`codex-rs/hooks/schema/generated`, `output_parser.rs`, per-event files at
+rust-v0.160.0). `src/claude-hook-*.ts` and `src/codex-hook-payloads.ts`
+encode them as the public `@lostgradient/skillset` exports. Claude: every
+event's stdin is the common fields (`session_id`, `transcript_path`, `cwd`
+required; optional `scratchpad_dir`, `prompt_id`, `permission_mode` (plain
+string), `agent_id`, `agent_type`, `effort.level`) plus event fields; stdout is
+one object (`continue`, `suppressOutput`, `stopReason`, `decision`
+`approve|block`, `reason`, `systemMessage`, `terminalSequence`,
+`hookSpecificOutput`) or the async form `{async: true, asyncTimeout?}`. The
+binary has 22 `hookSpecificOutput` variants; SessionEnd, StopFailure,
+PreCompact, PostCompact, TeammateIdle, TaskCreated, TaskCompleted,
+InstructionsLoaded, ConfigChange, DirectoryAdded, WorktreeRemove have none.
+Setup and Notification have variants but Claude discards their output.
+`StopFailure.error` has 13 values in the binary (docs list 12; the extra is
+`verification_required`). `UserPromptSubmit.source` is in the binary but not
+the docs. `scratchpad_dir` is sent at runtime (2.1.257) but absent from the
+binary's exported schema. The binary accepts top-level `decision: approve`,
+the docs say `block` only. `hookSpecificOutput.hookEventName` must match the
+running event or Claude throws. Payload objects are loose: the binary strips
+unknown output keys (INFERRED from plain Zod objects, not tested). Codex:
+stdin always carries `session_id`, `transcript_path` (string or null), `cwd`,
+`hook_event_name`; `model` on all but SessionEnd; `turn_id` on all but
+SessionStart/SessionEnd; `permission_mode` (enum of five, runtime emits only
+`default` or `bypassPermissions`) except SessionEnd, PreCompact, PostCompact;
+`agent_id`/`agent_type` optional on PreToolUse, PermissionRequest,
+PostToolUse, PreCompact, PostCompact, UserPromptSubmit and required on
+SubagentStart/SubagentStop. Codex output structs use `deny_unknown_fields`, so
+one unknown key marks the run Failed: the exported output schemas are strict.
+SessionEnd stdout is never parsed (no schema). Interrupt output accepts only
+`systemMessage`. Compaction output is the four universal fields only. On
+PreToolUse, PermissionRequest, and PostToolUse, `continue: false`, any
+`stopReason`, and `suppressOutput: true` fail the run, so the exported schemas
+reject them there. Stop and
+SubagentStop have no `hookSpecificOutput`. PreToolUse `ask`/`approve` parse but
+fail the run, `allow` needs `updatedInput`, `deny` needs a reason; these
+semantic rules are documented, not encoded. Delta from 0.147 to 0.160: new
+Interrupt event, SessionStart `source` gained `fork`. UNVERIFIED: whether Rust
+checks `hookEventName` inside `hookSpecificOutput` against the running event,
+exact `tool_response` shapes for MCP tools, per-tool `tool_input` shapes (kept
+`unknown`), introduction versions of PostToolBatch and UserPromptExpansion.
 
 **Other config.toml surface** a compiler should know: `model*` keys,
 `approval_policy` (untrusted|on-request|never), `sandbox_mode`,
@@ -189,10 +299,12 @@ our emitted TOML.
 - Agent `permissionMode`: `plan` → `sandbox_mode = "read-only"`,
   `acceptEdits` → `"workspace-write"`; others unmapped (doctor warns).
 - Agent `tools`/`disallowedTools` → prose "Tool guidance" in
-  `developer_instructions`; `codex.tools` available for the native table.
+  `developer_instructions`; Codex has no per-agent tool allowlist, and
+  `codex.tools` is the `[tools]` settings table (validated, dropped by Codex).
 - Agent `hooks`/`mcpServers`/`skills` → NOT auto-translated (schemas differ);
-  authors set `codex.hooks`/`codex.mcp_servers`/`codex.skills`, emitted
-  verbatim; doctor reminds when the Claude side is set without them.
+  authors set `codex.hooks`/`codex.mcp_servers`/`codex.skills`, typed against
+  Codex 0.160's tables (hooks reuse the hooks.yaml Codex handler schema) and
+  emitted as TOML; doctor reminds when the Claude side is set without them.
 - Dropped for Codex (no documented equivalent): agent `maxTurns`, `memory`,
   `background`, `isolation`, `initialPrompt`.
 - MCP: `Bearer ${VAR}` Authorization → `bearer_token_env_var`; `${VAR}`-only
@@ -203,9 +315,13 @@ our emitted TOML.
   `${CLAUDE_SESSION_ID}`/`${CLAUDE_EFFORT}` → dropped (guard with
   `#if claude`).
 - Hooks: `hooks.yaml` compiles to the `hooks` key of Claude's settings.json
-  and Codex's hooks.json — the entry shape is shared; Codex is restricted to
-  its 11 events and command handlers; `timeout` is seconds in both; Codex
-  writes require re-trusting via `/hooks`.
+  and Codex's hooks.json — the entry shape is shared. A definition's `type`
+  (default `command`) may be `command`, `http`, `mcp_tool`, `prompt`, or
+  `agent`; Claude runs all five, Codex runs only `command` and `mcp_tool`
+  (`mcp_tool` not on SessionEnd), so the others need `targets: [claude]`.
+  Each merged per-target handler is validated against that target's schema
+  (errors) and fields it does not read warn. `timeout` is seconds in both;
+  Codex writes require re-trusting via `/hooks`.
 - Instructions: `instructions.md` → `CLAUDE.md` / `AGENTS.md`; Claude `@path`
   imports have no Codex equivalent (doctor warns unless guarded).
 - Defaults: `defaults.yaml` → settings.json `model`/`effortLevel` and
@@ -216,8 +332,6 @@ our emitted TOML.
 - Whether Codex substitutes declared `arguments` into skill bodies at
   runtime (the field is documented; substitution semantics are not). We emit
   the field and still prose-rewrite `$name` tokens.
-- The exact schema of the Codex per-agent `tools` table (documented to exist;
-  shape not observed). `codex.tools` is passed through verbatim.
 - Claude-to-Codex hook auto-translation: both support command hooks on an
   overlapping event set, so a partial compiler is feasible — deliberately not
   built yet.

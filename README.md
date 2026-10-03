@@ -84,6 +84,30 @@ Configuration and help text:
 - `environment` is the resolved configuration (`NODE_ENV`, `SKILLSET_DIRECTORY`) read once at module load through `@lostgradient/environmentalist`; `parseEnvironment(source?)` validates an arbitrary record against the same schema without the dotenv/config-file chain, for tests.
 - `commandHelp(command)` and `USAGE` are the help text `-h`/`--help` prints.
 
+Hook payloads (for writing hook scripts):
+
+- `claudeHookInputSchema` (33 events, discriminated on `hook_event_name`) and `codexHookInputSchema` (12 events) validate the JSON a hook receives on stdin; `claudeHookInputSchemas`/`codexHookInputSchemas` hold the per-event schemas keyed by event name. `parseClaudeHookInput(payload)`/`parseCodexHookInput(payload)` dispatch on `hook_event_name` and throw a `ZodError` on a mismatch; `safeParseClaudeHookInput`/`safeParseCodexHookInput` return a result instead.
+- `claudeHookOutputSchema` (with its 22 `claudeHookSpecificOutputSchemas` variants and the `claudeAsyncHookOutputSchema` async form) and `codexHookOutputSchemas` (keyed by event) describe what a hook may print to stdout; `parseClaudeHookOutput(payload)` and `parseCodexHookOutput(eventName, payload)` validate it. `claudeHookEventNames`/`codexHookEventNames` list the events.
+- Input and Claude output schemas are `z.looseObject`, so a field a newer Claude Code or Codex adds never fails a parse and survives into the parsed value. Codex output schemas are strict, because Codex marks a hook run Failed when stdout carries an unknown key. Rules the schemas cannot express (a Codex `block` needs a non-empty `reason`, PreToolUse `allow` needs `updatedInput`) are not enforced; see the Codex hooks docs. `tool_input` and `tool_response` stay `unknown` because their shape depends on the tool.
+- Types: `ClaudeHookInput`, `ClaudeHookInputFor<'Stop'>`, `ClaudeHookOutput`, `CodexHookInput`, `CodexHookInputFor<'Stop'>`, `CodexHookOutputFor<'Stop'>`, and the event name unions.
+
+```typescript
+import { parseClaudeHookInput, type ClaudeHookOutput } from '@lostgradient/skillset';
+
+const input = parseClaudeHookInput(JSON.parse(await Bun.stdin.text()));
+
+if (input.hook_event_name === 'PreToolUse' && input.tool_name === 'Bash') {
+  const output: ClaudeHookOutput = {
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: 'deny',
+      permissionDecisionReason: 'Shell access is disabled in this repository.',
+    },
+  };
+  console.log(JSON.stringify(output));
+}
+```
+
 Every exported type (`SourceKind`, `Target`, `Scope`, `Invocation`, `Analysis`, `Ledger`, `LedgerItem`, `SyncAction`, `SyncOptions`, `CompilableSkill`/`CompilableAgent`/`CompilableSources`, `SourceSkill`/`SourceAgent`/`SourceFile`/`Sources`, `SkillFrontmatter`/`AgentFrontmatter`, `ParsedSkillFile`/`ParsedAgentFile`, `McpServer`/`ParsedMcpSource`, `HooksSource`, `DefaultsSource`, `Environment`, `ListEntry`/`ShowFile`, `TargetStatus`, `KindFilter`, `UsageOutcome`, `RenderResult`/`TemplateError`, `EmittedFile`, `Targets`/`ToolTargets`, `EmbeddedAction`) ships alongside its function — see `src/index.ts` for the complete, current export list.
 
 ## Skills (`./skills/<name>/SKILL.md`)
@@ -122,7 +146,7 @@ Claude-style subagent markdown — frontmatter plus a body that becomes the syst
 ---
 name: reviewer
 description: Reviews diffs.
-tools: Read, Grep # becomes prose in the Codex output (set codex.tools for the native form)
+tools: Read, Grep # becomes prose in the Codex output (Codex has no per-agent tool allowlist)
 model: haiku # Claude model family
 permissionMode: plan # plan → read-only, acceptEdits → workspace-write
 codex: # Codex models are a different family, so they're explicit
@@ -132,9 +156,13 @@ codex: # Codex models are a different family, so they're explicit
 ---
 ```
 
+Codex 0.149 and later parse `sandbox_mode` in an agent file but discard it (the same goes for `mcp_servers`, `hooks`, and `tools`), even though the Codex docs still list the key. skillset keeps emitting it for older Codex versions, and `doctor` warns whenever the emitted file carries one, whether you set it in `codex:` or it was implied by `permissionMode`.
+
 Claude gets the file nearly verbatim at `~/.claude/agents/<name>.md` (supported fields: `tools`, `disallowedTools`, `model`, `permissionMode`, `maxTurns`, `skills`, `mcpServers`, `hooks`, `memory`, `background`, `effort`, `isolation` (`worktree` or `remote`), `color`, `initialPrompt`, `omitClaudeMd`, `experimental.cacheTtl`, and the undocumented `observer`, `observerMessage`, and `observeSubagents`). Codex gets `~/.codex/agents/<name>.toml` with the body as `developer_instructions` (Codex fallbacks applied), `tools`/`disallowedTools` folded in as a "Tool guidance" prose section, and the `codex:` block's settings (`model`, `model_reasoning_effort`, `model_verbosity`, `sandbox_mode`, `nickname_candidates`).
 
-Codex agents also natively support `hooks`, `mcp_servers`, `skills`, and `tools` tables — but with different schemas from Claude's same-named frontmatter, so skillset does not auto-translate them: set `codex.hooks` / `codex.mcp_servers` / `codex.skills` / `codex.tools` and they are emitted verbatim as TOML tables (doctor reminds you when the Claude-side field is set without its Codex counterpart). Only `maxTurns`, `memory`, `background`, `isolation`, `initialPrompt`, `omitClaudeMd`, `experimental`, `observer`, `observerMessage`, and `observeSubagents` have no documented Codex equivalent and are dropped with a warning. See `agents/example-agent.md`.
+Subagent `mcpServers` items are validated as Claude Code reads them: a server name, or a mapping from one name to a full inline entry (`stdio`, `http`, `sse`, or `ws`). Claude Code logs an invalid or unknown-type item, drops it, and still loads the agent, so `doctor` reports those as warnings rather than errors (a `claudeai-proxy` item parses, but it is a claude.ai connector Claude manages itself, so `doctor` warns that it isn't a user-authored transport). `codex.mcp_servers` uses the same Codex schema as `mcp-servers.yaml`; note that Codex 0.160 validates but does not apply `mcp_servers` from an agent file, and `doctor` says so. Unknown-field warnings reach one level into the Claude `oauth` object and the Codex `oauth` table, object-form `env_vars` entries, and `tools.<tool>` tables (reported as `oauth.clientid`, `env_vars[0].nme`, `tools.search.approval`).
+
+Codex agents also natively support `hooks`, `mcp_servers`, `skills`, and `tools` tables — but with different schemas from Claude's same-named frontmatter, so skillset does not auto-translate them: set `codex.hooks` / `codex.mcp_servers` / `codex.skills` / `codex.tools` and they are validated against Codex 0.160's own tables (`codex.hooks` uses the same handler schema as `hooks.yaml`; `codex.tools` is the `[tools]` settings table, not an allowlist) and emitted as TOML tables, with unknown fields kept and reported as warnings. Codex 0.160 applies only restrictive `skills` entries from an agent file and drops `hooks`, `mcp_servers`, and `tools`, so doctor says so (doctor reminds you when the Claude-side field is set without its Codex counterpart). Only `maxTurns`, `memory`, `background`, `isolation`, `initialPrompt`, `omitClaudeMd`, `experimental`, `observer`, `observerMessage`, and `observeSubagents` have no documented Codex equivalent and are dropped with a warning. See `agents/example-agent.md`.
 
 ## MCP servers (`./mcp-servers.yaml`)
 
@@ -151,7 +179,7 @@ servers:
     codex: { startup_timeout_sec: 120 } # merged into the Codex section; wins
 ```
 
-Codex mappings: `${VAR}`-only header values → `env_http_headers`, static headers → `http_headers`, `${VAR}`-only `env` values → `env_vars` (literals stay in `env`). SSE and WebSocket transports are rejected at the source level — Claude still accepts them, but Codex supports only stdio and streamable HTTP, and a union source must compile for both. Claude-only extras (`headersHelper`, `oauth`, …) go through the `claude:` block; Codex-only extras (`auth`, `required`, `enabled_tools`, …) through `codex:`. Writes are surgical: the Claude edit touches only the managed `mcpServers` entries in `~/.claude.json`; the Codex edit splices only the managed `[mcp_servers.<name>]` line spans in `~/.codex/config.toml`, so comments and formatting elsewhere survive byte-for-byte.
+Codex mappings: `${VAR}`-only header values → `env_http_headers`, static headers → `http_headers`, `${VAR}`-only `env` values → `env_vars` (literals stay in `env`). SSE and WebSocket transports are rejected at the source level — Claude still accepts them, but Codex supports only stdio and streamable HTTP, and a union source must compile for both. Claude-only extras (`headersHelper`, `oauth`, …) go through the `claude:` block; Codex-only extras (`auth`, `required`, `enabled_tools`, …) through `codex:`. Both blocks are typed against each tool's own schema (Claude Code 2.1.288's MCP entry, Codex 0.160's `[mcp_servers.<name>]` table), so a wrong type or value fails to parse, and `doctor` validates the merged per-target entry: missing or mismatched transport fields (for example a Codex `args` on a `url` server, or a Claude `type: http` without a `url`) are errors, while fields the chosen transport does not read — including renamed ones such as Codex's old `experimental_environment`, now `environment_id` — are kept in the output and reported as warnings, including unknown keys nested inside the `oauth`, `env_vars`, and `tools` tables. Writes are surgical: the Claude edit touches only the managed `mcpServers` entries in `~/.claude.json`; the Codex edit splices only the managed `[mcp_servers.<name>]` line spans in `~/.codex/config.toml`, so comments and formatting elsewhere survive byte-for-byte.
 
 ## Instructions (`./instructions.md`)
 
@@ -173,13 +201,20 @@ hooks:
   FileChanged:
     - command: ./scripts/watch.sh
       targets: [claude] # Claude-only event — restriction required
+  Stop:
+    - type: mcp_tool # command (default), http, mcp_tool, prompt, or agent
+      server: audit
+      tool: record
+      input: { event: stop }
 ```
+
+A handler without `type` is a `command` hook, so older files keep working. Claude runs all five handler types (`command`, `http`, `mcp_tool`, `prompt`, `agent`, each with that type's own fields); Codex 0.160 runs `command` and `mcp_tool` (not on `SessionEnd`) and parses then skips `prompt` and `agent`. `doctor` errors when a handler type the target cannot run reaches that target (add `targets: [claude]`), validates each merged per-target handler against that tool's schema, and warns about fields the target does not read.
 
 Both tools support 11 shared events (`SessionStart/End`, `PreToolUse`, `PermissionRequest`, `PostToolUse`, `UserPromptSubmit`, `Stop`, `PreCompact/PostCompact`, `SubagentStart/Stop`). Claude adds 22 more (including `PreModelSwitch`/`PostModelSwitch`, Claude Code 2.1.251+), and Codex adds `Interrupt` (codex-cli 0.150.0+). `doctor` errors when a hook targets a tool that lacks its event—restrict Claude-only events with `targets: [claude]` and `Interrupt` with `targets: [codex]`. Ownership is entry-level via the ledger: hand-written hooks in the same files are never touched, and a managed entry you hand-edit is treated as drifted. Heads-up on every Codex hook write: Codex trust-hashes its hook config, so changed hooks must be re-trusted via `/hooks`.
 
 ## Defaults (`./defaults.yaml`)
 
-Model/effort defaults, applied as surgical key-level edits (`model`/`effortLevel` in Claude's `settings.json`; top-level `model`/`model_reasoning_effort`/`model_verbosity` scalars in Codex's `config.toml`, comments preserved). Keys the user set by hand are skipped as unmanaged.
+Model/effort defaults, applied as surgical key-level edits (`model`/`effortLevel` in Claude's `settings.json`; top-level `model`/`model_reasoning_effort`/`model_verbosity` scalars in Codex's `config.toml`, comments preserved). Keys the user set by hand are skipped as unmanaged. `claude.effort` accepts exactly what `effortLevel` accepts: `low`, `medium`, `high`, or `xhigh` (not `max`, which only skill and subagent frontmatter `effort` takes).
 
 ```yaml
 claude: { model: opus, effort: high }
