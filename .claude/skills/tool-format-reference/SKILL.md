@@ -207,6 +207,30 @@ also `environment_id`, `omit_tools_from` (code_mode|deferred|direct),
 Agent role files: `mcp_servers` is validated then DROPPED by role.rs, so
 `codex.mcp_servers` in an agent has no runtime effect in 0.160.
 
+**Codex hooks, skills, and tools tables** (re-verified 2026-10-03 against
+codex-cli 0.160.0: hook_config.rs, discovery.rs, skills_config.rs, role.rs,
+config.schema.json at rust-v0.160.0). `[hooks]` (also hooks.json, whose top
+level is strict `{description?, hooks}`): 12 PascalCase event tables of
+`{matcher?, hooks[]}` groups plus a `state` table (`{enabled?, trusted_hash?}`
+per hook key). Handler types: `command` (`command` required and non-blank,
+`commandWindows`/`command_windows`, `timeout` integer seconds, default 600 and
+1 to 3 for SessionEnd/Interrupt, `statusMessage`, `async` forced sync on
+SessionEnd, `additionalContextLimit`) and `mcp_tool` (`server`, `tool`,
+`input`, `timeout`, `statusMessage`; not run on SessionEnd). `prompt` and
+`agent` parse (extra keys ignored) and are then skipped with a load-failure
+warning, so Codex never runs them. Unknown handler keys are ignored. An
+unknown handler `type` is INFERRED to be a parse error (serde tagged enum), so
+doctor only warns. `[skills]`: `bundled.enabled`, `include_instructions`,
+`max_context_tokens`, `[[skills.config]]` rules of `{path|name, enabled}`
+(`enabled` required; exactly-one-of `path`/`name` is INFERRED, not enforced by
+the schema). `[tools]` is a strict table, not an allowlist:
+`experimental_request_user_input.enabled`, `update_plan.enabled`,
+`web_search.{allowed_domains,context_size,location}`; there is no per-agent
+tool allowlist array. In a role file all three are validated against
+`ConfigToml`, but role.rs projects only restrictive skills entries
+(`enabled = false`, disabled bundled set, `include_instructions = false`);
+`hooks` and `tools` are dropped (role_tests hostile-role test).
+
 **Other config.toml surface** a compiler should know: `model*` keys,
 `approval_policy` (untrusted|on-request|never), `sandbox_mode`,
 `shell_environment_policy`, `features` (check `codex features list` — the
@@ -227,10 +251,12 @@ our emitted TOML.
 - Agent `permissionMode`: `plan` → `sandbox_mode = "read-only"`,
   `acceptEdits` → `"workspace-write"`; others unmapped (doctor warns).
 - Agent `tools`/`disallowedTools` → prose "Tool guidance" in
-  `developer_instructions`; `codex.tools` available for the native table.
+  `developer_instructions`; Codex has no per-agent tool allowlist, and
+  `codex.tools` is the `[tools]` settings table (validated, dropped by Codex).
 - Agent `hooks`/`mcpServers`/`skills` → NOT auto-translated (schemas differ);
-  authors set `codex.hooks`/`codex.mcp_servers`/`codex.skills`, emitted
-  verbatim; doctor reminds when the Claude side is set without them.
+  authors set `codex.hooks`/`codex.mcp_servers`/`codex.skills`, typed against
+  Codex 0.160's tables (hooks reuse the hooks.yaml Codex handler schema) and
+  emitted as TOML; doctor reminds when the Claude side is set without them.
 - Dropped for Codex (no documented equivalent): agent `maxTurns`, `memory`,
   `background`, `isolation`, `initialPrompt`.
 - MCP: `Bearer ${VAR}` Authorization → `bearer_token_env_var`; `${VAR}`-only
@@ -241,9 +267,13 @@ our emitted TOML.
   `${CLAUDE_SESSION_ID}`/`${CLAUDE_EFFORT}` → dropped (guard with
   `#if claude`).
 - Hooks: `hooks.yaml` compiles to the `hooks` key of Claude's settings.json
-  and Codex's hooks.json — the entry shape is shared; Codex is restricted to
-  its 11 events and command handlers; `timeout` is seconds in both; Codex
-  writes require re-trusting via `/hooks`.
+  and Codex's hooks.json — the entry shape is shared. A definition's `type`
+  (default `command`) may be `command`, `http`, `mcp_tool`, `prompt`, or
+  `agent`; Claude runs all five, Codex runs only `command` and `mcp_tool`
+  (`mcp_tool` not on SessionEnd), so the others need `targets: [claude]`.
+  Each merged per-target handler is validated against that target's schema
+  (errors) and fields it does not read warn. `timeout` is seconds in both;
+  Codex writes require re-trusting via `/hooks`.
 - Instructions: `instructions.md` → `CLAUDE.md` / `AGENTS.md`; Claude `@path`
   imports have no Codex equivalent (doctor warns unless guarded).
 - Defaults: `defaults.yaml` → settings.json `model`/`effortLevel` and
@@ -254,8 +284,6 @@ our emitted TOML.
 - Whether Codex substitutes declared `arguments` into skill bodies at
   runtime (the field is documented; substitution semantics are not). We emit
   the field and still prose-rewrite `$name` tokens.
-- The exact schema of the Codex per-agent `tools` table (documented to exist;
-  shape not observed). `codex.tools` is passed through verbatim.
 - Claude-to-Codex hook auto-translation: both support command hooks on an
   overlapping event set, so a partial compiler is feasible — deliberately not
   built yet.

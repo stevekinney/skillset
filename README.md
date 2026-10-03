@@ -122,7 +122,7 @@ Claude-style subagent markdown — frontmatter plus a body that becomes the syst
 ---
 name: reviewer
 description: Reviews diffs.
-tools: Read, Grep # becomes prose in the Codex output (set codex.tools for the native form)
+tools: Read, Grep # becomes prose in the Codex output (Codex has no per-agent tool allowlist)
 model: haiku # Claude model family
 permissionMode: plan # plan → read-only, acceptEdits → workspace-write
 codex: # Codex models are a different family, so they're explicit
@@ -136,7 +136,7 @@ Claude gets the file nearly verbatim at `~/.claude/agents/<name>.md` (supported 
 
 Subagent `mcpServers` items are validated as Claude Code reads them: a server name, or a mapping from one name to a full inline entry (`stdio`, `http`, `sse`, or `ws`). `codex.mcp_servers` uses the same Codex schema as `mcp-servers.yaml`; note that Codex 0.160 validates but does not apply `mcp_servers` from an agent file, and `doctor` says so.
 
-Codex agents also natively support `hooks`, `mcp_servers`, `skills`, and `tools` tables — but with different schemas from Claude's same-named frontmatter, so skillset does not auto-translate them: set `codex.hooks` / `codex.mcp_servers` / `codex.skills` / `codex.tools` and they are emitted verbatim as TOML tables (doctor reminds you when the Claude-side field is set without its Codex counterpart). Only `maxTurns`, `memory`, `background`, `isolation`, `initialPrompt`, `omitClaudeMd`, `experimental`, `observer`, `observerMessage`, and `observeSubagents` have no documented Codex equivalent and are dropped with a warning. See `agents/example-agent.md`.
+Codex agents also natively support `hooks`, `mcp_servers`, `skills`, and `tools` tables — but with different schemas from Claude's same-named frontmatter, so skillset does not auto-translate them: set `codex.hooks` / `codex.mcp_servers` / `codex.skills` / `codex.tools` and they are validated against Codex 0.160's own tables (`codex.hooks` uses the same handler schema as `hooks.yaml`; `codex.tools` is the `[tools]` settings table, not an allowlist) and emitted as TOML tables, with unknown fields kept and reported as warnings. Codex 0.160 applies only restrictive `skills` entries from an agent file and drops `hooks`, `mcp_servers`, and `tools`, so doctor says so (doctor reminds you when the Claude-side field is set without its Codex counterpart). Only `maxTurns`, `memory`, `background`, `isolation`, `initialPrompt`, `omitClaudeMd`, `experimental`, `observer`, `observerMessage`, and `observeSubagents` have no documented Codex equivalent and are dropped with a warning. See `agents/example-agent.md`.
 
 ## MCP servers (`./mcp-servers.yaml`)
 
@@ -175,7 +175,14 @@ hooks:
   FileChanged:
     - command: ./scripts/watch.sh
       targets: [claude] # Claude-only event — restriction required
+  Stop:
+    - type: mcp_tool # command (default), http, mcp_tool, prompt, or agent
+      server: audit
+      tool: record
+      input: { event: stop }
 ```
+
+A handler without `type` is a `command` hook, so older files keep working. Claude runs all five handler types (`command`, `http`, `mcp_tool`, `prompt`, `agent`, each with that type's own fields); Codex 0.160 runs `command` and `mcp_tool` (not on `SessionEnd`) and parses then skips `prompt` and `agent`. `doctor` errors when a handler type the target cannot run reaches that target (add `targets: [claude]`), validates each merged per-target handler against that tool's schema, and warns about fields the target does not read.
 
 Both tools support 11 shared events (`SessionStart/End`, `PreToolUse`, `PermissionRequest`, `PostToolUse`, `UserPromptSubmit`, `Stop`, `PreCompact/PostCompact`, `SubagentStart/Stop`). Claude adds 22 more (including `PreModelSwitch`/`PostModelSwitch`, Claude Code 2.1.251+), and Codex adds `Interrupt` (codex-cli 0.150.0+). `doctor` errors when a hook targets a tool that lacks its event—restrict Claude-only events with `targets: [claude]` and `Interrupt` with `targets: [codex]`. Ownership is entry-level via the ledger: hand-written hooks in the same files are never touched, and a managed entry you hand-edit is treated as drifted. Heads-up on every Codex hook write: Codex trust-hashes its hook config, so changed hooks must be re-trusted via `/hooks`.
 

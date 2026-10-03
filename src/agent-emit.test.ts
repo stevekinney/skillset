@@ -99,18 +99,18 @@ description: Has hooks.
 codex:
   model_verbosity: low
   hooks:
-    hooks:
-      PreToolUse:
-        - matcher: '.*'
-          hooks:
-            - type: command
-              command: echo hi
+    PreToolUse:
+      - matcher: '.*'
+        hooks:
+          - type: command
+            command: echo hi
   mcp_servers:
     codex:
       command: codex
       args: [mcp-server]
   tools:
-    web_search: true
+    web_search:
+      context_size: low
 ---
 
 Body.
@@ -120,9 +120,9 @@ Body.
 
     expect(parsed['model_verbosity']).toBe('low');
     expect(parsed['developer_instructions']).toBe('Body.\n');
-    expect(parsed['hooks']).toMatchObject({ hooks: { PreToolUse: [{ matcher: '.*' }] } });
+    expect(parsed['hooks']).toMatchObject({ PreToolUse: [{ matcher: '.*' }] });
     expect(parsed['mcp_servers']).toMatchObject({ codex: { command: 'codex' } });
-    expect(parsed['tools']).toEqual({ web_search: true });
+    expect(parsed['tools']).toEqual({ web_search: { context_size: 'low' } });
 
     // Tables must come after the developer_instructions scalar, or TOML
     // would swallow it into the preceding table.

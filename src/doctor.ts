@@ -7,6 +7,7 @@ import {
   parseAgentFile,
   type ParsedAgentFile,
 } from './agent-frontmatter.js';
+import { checkCodexAgentTables } from './agent-codex-checks.js';
 import type { SourceAgent, SourceSkill } from './discover.js';
 import { applyCodexFallbacks, argumentNames } from './fallback.js';
 import { parseSkillFile, type ParsedSkillFile } from './frontmatter.js';
@@ -350,6 +351,7 @@ export function checkAgent(agent: SourceAgent): AgentReport {
     ...checkHookFields(parsed.frontmatter.hooks),
     ...checkAgentBody(parsed),
     ...checkAgentMcpServers(parsed),
+    ...checkCodexAgentTables(parsed),
     ...checkAgentCodexMapping(parsed),
   );
 
