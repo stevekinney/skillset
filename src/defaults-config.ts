@@ -12,6 +12,9 @@ import { isMapping } from './frontmatter.js';
  */
 export const claudeSettingsEffortSchema = z.enum(['low', 'medium', 'high', 'xhigh']);
 
+/** A Claude Code settings.json `effortLevel` value. */
+export type ClaudeSettingsEffort = z.infer<typeof claudeSettingsEffortSchema>;
+
 /**
  * The defaults.yaml source: model/effort defaults for each tool. Claude keys
  * land in settings.json (`model`, `effortLevel`); Codex keys land as

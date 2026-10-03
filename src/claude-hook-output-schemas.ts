@@ -144,7 +144,18 @@ export const claudeAsyncHookOutputSchema = z.looseObject({
 export type ClaudeHookOutput = z.infer<typeof claudeHookOutputSchema>;
 export type ClaudeAsyncHookOutput = z.infer<typeof claudeAsyncHookOutputSchema>;
 
+/** Everything a command hook may print: a synchronous output or the async form. */
+export const claudeHookOutputOrAsyncSchema = z.union([
+  claudeAsyncHookOutputSchema,
+  claudeHookOutputSchema,
+]);
+
 /** Parse what a hook printed to stdout, accepting either the regular or the async form. */
 export function parseClaudeHookOutput(payload: unknown): ClaudeHookOutput | ClaudeAsyncHookOutput {
-  return z.union([claudeAsyncHookOutputSchema, claudeHookOutputSchema]).parse(payload);
+  return claudeHookOutputOrAsyncSchema.parse(payload);
+}
+
+/** Like {@link parseClaudeHookOutput} but returns a result instead of throwing. */
+export function safeParseClaudeHookOutput(payload: unknown) {
+  return claudeHookOutputOrAsyncSchema.safeParse(payload);
 }

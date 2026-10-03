@@ -5,6 +5,7 @@ import {
   claudeHookOutputSchema,
   claudeHookSpecificOutputSchemas,
   parseClaudeHookOutput,
+  safeParseClaudeHookOutput,
 } from './claude-hook-output-schemas.js';
 import { claudePermissionUpdateSchema } from './claude-hook-shared.js';
 
@@ -114,5 +115,12 @@ describe('Claude hook output schemas', () => {
 
   it('rejects an unknown permission update type', () => {
     expect(claudePermissionUpdateSchema.safeParse({ type: 'nope' }).success).toBe(false);
+  });
+});
+
+describe('safeParseClaudeHookOutput', () => {
+  it('returns a result instead of throwing', () => {
+    expect(safeParseClaudeHookOutput({ decision: 'block', reason: 'r' }).success).toBe(true);
+    expect(safeParseClaudeHookOutput({ continue: 'yes' }).success).toBe(false);
   });
 });

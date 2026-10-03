@@ -8,6 +8,7 @@ import {
   parseCodexHookOutput,
   safeParseCodexHookInput,
   type CodexHookInputFor,
+  safeParseCodexHookOutput,
 } from './codex-hook-payloads.js';
 
 const base = { session_id: 's', transcript_path: null, cwd: '/w' };
@@ -183,5 +184,13 @@ describe('Codex hook output schemas', () => {
 
   it('accepts anything for SessionEnd because Codex never parses its stdout', () => {
     expect(parseCodexHookOutput('SessionEnd', 'free text')).toBe('free text');
+  });
+});
+
+describe('safeParseCodexHookOutput', () => {
+  it('returns a result for the event instead of throwing', () => {
+    const result = safeParseCodexHookOutput('Stop', { decision: 'block', reason: 'again' });
+    expect(result.success && result.data.decision).toBe('block');
+    expect(safeParseCodexHookOutput('PreToolUse', { suppressOutput: true }).success).toBe(false);
   });
 });

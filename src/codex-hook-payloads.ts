@@ -291,3 +291,12 @@ export function parseCodexHookOutput<Name extends CodexHookEventName>(
 export function parseCodexHookOutput(eventName: CodexHookEventName, payload: unknown): unknown {
   return codexHookOutputSchemas[eventName].parse(payload);
 }
+
+/** Like {@link parseCodexHookOutput} but returns a result instead of throwing. */
+export function safeParseCodexHookOutput<Name extends CodexHookEventName>(
+  eventName: Name,
+  payload: unknown,
+): z.ZodSafeParseResult<CodexHookOutputFor<Name>>;
+export function safeParseCodexHookOutput(eventName: CodexHookEventName, payload: unknown) {
+  return codexHookOutputSchemas[eventName].safeParse(payload);
+}

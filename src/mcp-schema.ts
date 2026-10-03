@@ -72,6 +72,22 @@ const claudeHttpSchema = z.looseObject({
 });
 const claudeWebSocketSchema = z.looseObject({ type: z.literal('ws'), ...webSocketFields });
 
+/**
+ * One Claude Code `mcpServers` entry, for any authorable transport (an entry
+ * without `type` is stdio). Claude's loader also skips an entry with a `url`
+ * but no `type`, which a schema can't express; `claudeMcpEntryProblems`
+ * reports that case.
+ */
+export const claudeMcpServerSchema = z.union([
+  claudeStdioSchema,
+  claudeSseSchema,
+  claudeHttpSchema,
+  claudeWebSocketSchema,
+]);
+
+/** A validated Claude Code `mcpServers` entry. */
+export type ClaudeMcpServer = z.infer<typeof claudeMcpServerSchema>;
+
 const CLAUDE_ENTRY_SCHEMAS = new Map<string, z.ZodObject>([
   ['stdio', claudeStdioSchema],
   ['sse', claudeSseSchema],
@@ -301,6 +317,9 @@ export const codexMcpServerSchema = codexMcpFieldsSchema.superRefine((section, c
   checkCodexOAuth(section, reject);
   checkCodexHeadersHelper(section, reject);
 });
+
+/** A validated Codex `[mcp_servers.<name>]` table. */
+export type CodexMcpServer = z.infer<typeof codexMcpServerSchema>;
 
 /** Validate one Codex `[mcp_servers.<name>]` section. */
 export function codexMcpProblems(section: Record<string, unknown>): McpProblem[] {

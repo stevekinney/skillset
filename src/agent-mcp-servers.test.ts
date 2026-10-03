@@ -6,12 +6,15 @@ describe('claudeAgentMcpServerSchema', () => {
   it('accepts a server name or a one-key inline entry', () => {
     expect(claudeAgentMcpServerSchema.parse('github')).toBe('github');
     const inline = { playwright: { type: 'stdio', command: 'npx', args: ['-y', 'x'] } };
-    expect(claudeAgentMcpServerSchema.parse(inline)).toEqual(inline);
+    expect(claudeAgentMcpServerSchema.parse(inline) as unknown).toEqual(inline);
   });
 
-  it('accepts every shape, leaving validation to claudeAgentMcpItemProblems', () => {
-    expect(claudeAgentMcpServerSchema.safeParse({ a: { type: 'http' } }).success).toBe(true);
-    expect(claudeAgentMcpServerSchema.safeParse(5).success).toBe(true);
+  it('rejects what Claude Code would drop', () => {
+    expect(claudeAgentMcpServerSchema.safeParse({ a: { type: 'http' } }).success).toBe(false);
+    expect(claudeAgentMcpServerSchema.safeParse(5).success).toBe(false);
+  });
+
+  it('reports why Claude Code would drop an item', () => {
     expect(claudeAgentMcpItemProblems({ a: { type: 'http' } })[0]?.path).toEqual(['a', 'url']);
     expect(claudeAgentMcpItemProblems([]).length).toBe(1);
     expect(claudeAgentMcpItemProblems({ a: { type: 'sdk' } }).length).toBe(1);
