@@ -78,7 +78,11 @@ bypassPermissions|plan|manual), `maxTurns`, `skills` (preloads full content),
 worktree); `effort` also takes an integer; `permissionMode: manual` is an
 alias for `default`; `background`/`omitClaudeMd` accept only true/false (bool
 or string) — NOT the skill yes/no/on/off spellings. Undocumented binary-only
-keys (not modeled): `observer`, `observerMessage`, `observeSubagents`.
+keys, modeled as optional: `observer` (non-blank agent type, trimmed),
+`observerMessage` (string), `observeSubagents` (true/false; only false acts).
+Skill schema @internal keys NOT modeled (Claude writes them; not
+author-facing): `version`, `fallback`, `created_by`, `improved_by`, and
+untyped plugin-manifest keys (`lspServers`, `themes`, `workflows`, …).
 Precedence: managed > `--agents` flag > project > user > plugin.
 
 **MCP** (`mcpServers` in `~/.claude.json` user/local scope, `.mcp.json`
@@ -106,7 +110,17 @@ on MessageDisplay), `statusMessage`, `once` (skills only). command: `command`,
 `prompt`, `model`. No matcher support on `UserPromptSubmit`, `PostToolBatch`,
 `Stop`, `TeammateIdle`, `TaskCreated`, `TaskCompleted`, `WorktreeCreate`,
 `WorktreeRemove`, `MessageDisplay`, `CwdChanged`. Skill/agent frontmatter `hooks:` uses the same schema, scoped to the
-component's lifetime.
+component's lifetime (agent schema: `hooks: <settings hooks schema>`, VERIFIED
+in the 2.1.288 binary). Handler schema as transcribed from the 2.1.288
+binary's Zod definitions (`src/hook-schema.ts` mirrors it): event keys are a
+`partialRecord` over the event enum (unknown events rejected); entry
+`{matcher?, hooks: [discriminated on type]}`; handler objects strip unknown
+keys. Every type has `if`, `timeout` (positive number, seconds),
+`statusMessage`, `once`. command: `command`, `args`, `shell`, `async`,
+`asyncRewake`, @internal `rewakeMessage`/`rewakeSummary`/`cloud`
+(device|skip). prompt: `prompt`, `model`, `continueOnBlock`. mcp_tool:
+`server`, `tool`, `input`. http: `url` (URL), `headers`, `allowedEnvVars`,
+@internal `cloud`. agent: `prompt`, `model`.
 
 **Memory**: `CLAUDE.md` chain (managed → `~/.claude/CLAUDE.md` → project →
 `CLAUDE.local.md`), `@path` imports (depth 4), `.claude/rules/*.md` +

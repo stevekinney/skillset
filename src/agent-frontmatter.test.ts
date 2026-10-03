@@ -117,3 +117,19 @@ describe('current Claude Code and Codex agent fields', () => {
     }
   });
 });
+
+describe('undocumented Claude Code agent fields', () => {
+  it('accepts the observer fields', () => {
+    const parsed = parseAgentFile(
+      agent('observer: auditor\nobserverMessage: Watch for drift.\nobserveSubagents: "false"'),
+    ).frontmatter;
+    expect(claudeAgentFrontmatter(parsed)).toEqual({
+      name: 'a',
+      description: 'b',
+      observer: 'auditor',
+      observerMessage: 'Watch for drift.',
+      observeSubagents: false,
+    });
+    expect(() => parseAgentFile(agent('observer: ""'))).toThrow();
+  });
+});

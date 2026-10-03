@@ -5,13 +5,8 @@ import {
   type EmbeddedAction,
 } from './config-files.js';
 import { isMapping, type Target } from './frontmatter.js';
-import {
-  hookEntry,
-  hookName,
-  hookTargets,
-  supportsHookEvent,
-  type HooksSource,
-} from './hooks-config.js';
+import { supportsHookEvent } from './hook-schema.js';
+import { hookEntry, hookName, hookTargets, type HooksSource } from './hooks-config.js';
 import {
   embeddedKey,
   forgetItem,

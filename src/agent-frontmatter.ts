@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { claudeEffortSchema, splitFrontmatter } from './frontmatter.js';
+import { claudeHookSettingsSchema } from './hook-schema.js';
 
 const stringOrStringList = z.union([z.string(), z.array(z.string())]);
 
@@ -67,7 +68,7 @@ export const agentFrontmatterSchema = z.object({
   maxTurns: z.number().int().positive().optional(),
   skills: z.array(z.string()).optional(),
   mcpServers: z.array(z.unknown()).optional(),
-  hooks: z.record(z.string(), z.unknown()).optional(),
+  hooks: claudeHookSettingsSchema.optional(),
   memory: z.enum(['user', 'project', 'local']).optional(),
   background: claudeAgentBoolean.optional(),
   effort: claudeEffortSchema.optional(),
@@ -76,6 +77,12 @@ export const agentFrontmatterSchema = z.object({
   initialPrompt: z.string().optional(),
   omitClaudeMd: claudeAgentBoolean.optional(),
   experimental: z.object({ cacheTtl: z.enum(['5m', '1h']).optional() }).optional(),
+  // Undocumented but read by Claude Code 2.1.288: an agent type spawned as a
+  // background observer of this agent, a postamble for its activity digests,
+  // and whether subagents inherit the observer (only `false` has an effect).
+  observer: z.string().trim().min(1).optional(),
+  observerMessage: z.string().optional(),
+  observeSubagents: claudeAgentBoolean.optional(),
 
   // Codex only — compiled to ~/.codex/agents/<name>.toml.
   codex: codexAgentSchema.optional(),
@@ -103,6 +110,9 @@ const CLAUDE_AGENT_KEYS = [
   'initialPrompt',
   'omitClaudeMd',
   'experimental',
+  'observer',
+  'observerMessage',
+  'observeSubagents',
 ] as const;
 
 /** Claude fields with no documented Codex equivalent — dropped from the TOML. */
@@ -114,6 +124,9 @@ export const CODEX_DROPPED_AGENT_KEYS = [
   'initialPrompt',
   'omitClaudeMd',
   'experimental',
+  'observer',
+  'observerMessage',
+  'observeSubagents',
 ] as const;
 
 /**

@@ -200,3 +200,21 @@ describe('current Claude Code and Codex skill fields', () => {
     expect(() => parseSkillFile(skill('openai:\n  policy:\n    products: [slack]'))).toThrow();
   });
 });
+
+describe('undocumented Claude Code skill fields', () => {
+  it('accepts disallowedTools as a Claude-only alias and keeps unknown hook fields', () => {
+    const parsed = parseSkillFile(
+      skill(
+        'disallowedTools: [Bash]\nhooks:\n  Stop:\n    - hooks:\n        - type: command\n          command: x\n          extra: 1',
+      ),
+    );
+    expect(parsed.unknownKeys).toEqual([]);
+    expect(claudeFrontmatter(parsed.frontmatter)).toEqual({
+      name: 'a',
+      description: 'b',
+      disallowedTools: ['Bash'],
+      hooks: { Stop: [{ hooks: [{ type: 'command', command: 'x', extra: 1 }] }] },
+    });
+    expect(codexFrontmatter(parsed.frontmatter)).toEqual({ name: 'a', description: 'b' });
+  });
+});

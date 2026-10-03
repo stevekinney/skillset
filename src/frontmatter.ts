@@ -1,6 +1,8 @@
 import { parse, stringify } from 'yaml';
 import { z } from 'zod';
 
+import { claudeHookSettingsSchema } from './hook-schema.js';
+
 /** The two tools this package compiles skills for. */
 export type Target = 'claude' | 'codex';
 
@@ -90,12 +92,14 @@ export const skillFrontmatterSchema = z.object({
   'disable-model-invocation': claudeSkillBoolean.optional(),
   'user-invocable': claudeSkillBoolean.optional(),
   'disallowed-tools': stringOrStringList.optional(),
+  // Undocumented alias Claude Code's own schema accepts for `disallowed-tools`.
+  disallowedTools: stringOrStringList.optional(),
   model: z.string().optional(),
   effort: claudeEffortSchema.optional(),
   context: z.enum(['inline', 'fork']).optional(),
   agent: z.string().optional(),
   background: claudeSkillBoolean.optional(),
-  hooks: z.record(z.string(), z.unknown()).optional(),
+  hooks: claudeHookSettingsSchema.optional(),
   paths: stringOrStringList.optional(),
   shell: z.enum(['bash', 'powershell']).optional(),
 
@@ -115,6 +119,7 @@ const CLAUDE_ONLY_KEYS = [
   'disable-model-invocation',
   'user-invocable',
   'disallowed-tools',
+  'disallowedTools',
   'model',
   'effort',
   'context',

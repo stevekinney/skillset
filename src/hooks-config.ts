@@ -3,72 +3,7 @@ import { z } from 'zod';
 
 import type { Issue } from './doctor.js';
 import { isMapping, type Target } from './frontmatter.js';
-
-/**
- * Lifecycle events both tools support. Verified October 2026 against Claude
- * Code 2.1.288 and codex-cli 0.160.0 (official hooks docs, release notes, and
- * the installed binaries' event enums).
- */
-const SHARED_HOOK_EVENTS = [
-  'SessionStart',
-  'SessionEnd',
-  'PreToolUse',
-  'PermissionRequest',
-  'PostToolUse',
-  'UserPromptSubmit',
-  'Stop',
-  'PreCompact',
-  'PostCompact',
-  'SubagentStart',
-  'SubagentStop',
-] as const;
-
-/**
- * Claude-only events that a hook may target with `targets: [claude]`. Kept to
- * the documented list so doctor can catch typos in event names.
- */
-export const CLAUDE_ONLY_HOOK_EVENTS = new Set([
-  'Setup',
-  'UserPromptExpansion',
-  'StopFailure',
-  'PostToolBatch',
-  'PermissionDenied',
-  'PostToolUseFailure',
-  'TeammateIdle',
-  'TaskCreated',
-  'TaskCompleted',
-  'InstructionsLoaded',
-  'ConfigChange',
-  'CwdChanged',
-  'DirectoryAdded',
-  'FileChanged',
-  'WorktreeCreate',
-  'WorktreeRemove',
-  'Notification',
-  'MessageDisplay',
-  'Elicitation',
-  'ElicitationResult',
-  // Claude Code 2.1.251+.
-  'PreModelSwitch',
-  'PostModelSwitch',
-]);
-
-/** Codex-only events that a hook may target with `targets: [codex]`. */
-export const CODEX_ONLY_HOOK_EVENTS = new Set([
-  // codex-cli 0.150.0+.
-  'Interrupt',
-]);
-
-/** Every lifecycle event Claude Code supports. */
-export const CLAUDE_HOOK_EVENTS = new Set([...SHARED_HOOK_EVENTS, ...CLAUDE_ONLY_HOOK_EVENTS]);
-
-/** Every lifecycle event Codex supports. */
-export const CODEX_HOOK_EVENTS = new Set([...SHARED_HOOK_EVENTS, ...CODEX_ONLY_HOOK_EVENTS]);
-
-/** Whether a target supports a hook event. */
-export function supportsHookEvent(target: Target, event: string): boolean {
-  return (target === 'claude' ? CLAUDE_HOOK_EVENTS : CODEX_HOOK_EVENTS).has(event);
-}
+import { CLAUDE_HOOK_EVENTS, CODEX_HOOK_EVENTS, supportsHookEvent } from './hook-schema.js';
 
 const hookSchema = z.object({
   matcher: z.string().optional(),
