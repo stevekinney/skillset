@@ -56,3 +56,13 @@ describe('checkDefaultsSource', () => {
     expect(checkDefaultsSource(parseDefaultsSource(raw))).toEqual([]);
   });
 });
+
+describe('Codex default values', () => {
+  it('rejects verbosity and effort values Codex rejects', () => {
+    expect(() => parseDefaultsSource('codex:\n  model_verbosity: loud\n')).toThrow();
+    expect(() => parseDefaultsSource('codex:\n  model_reasoning_effort: ""\n')).toThrow();
+    expect(parseDefaultsSource('codex:\n  model_verbosity: high\n').codex?.model_verbosity).toBe(
+      'high',
+    );
+  });
+});

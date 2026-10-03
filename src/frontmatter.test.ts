@@ -149,3 +149,54 @@ describe('serialization', () => {
     );
   });
 });
+
+const skill = (fields: string): string => `---\nname: a\ndescription: b\n${fields}\n---\nbody\n`;
+
+describe('current Claude Code and Codex skill fields', () => {
+  it('coerces the boolean spellings Claude Code accepts', () => {
+    const parsed = parseSkillFile(
+      skill('disable-model-invocation: "YES"\nuser-invocable: off\nbackground: 1'),
+    ).frontmatter;
+    expect(parsed['disable-model-invocation']).toBe(true);
+    expect(parsed['user-invocable']).toBe(false);
+    expect(parsed.background).toBe(true);
+
+    for (const value of ['on', ' True ', 'yes']) {
+      expect(parseSkillFile(skill(`background: "${value}"`)).frontmatter.background).toBe(true);
+    }
+    for (const value of ['0', 'no', 'False']) {
+      expect(parseSkillFile(skill(`background: "${value}"`)).frontmatter.background).toBe(false);
+    }
+    expect(() => parseSkillFile(skill('background: maybe'))).toThrow();
+    expect(() => parseSkillFile(skill('background: 2'))).toThrow();
+  });
+
+  it('does not treat a coerced false as disabling implicit invocation', () => {
+    const parsed = parseSkillFile(skill('disable-model-invocation: "no"')).frontmatter;
+    expect(openaiConfiguration(parsed)).toBeUndefined();
+  });
+
+  it('accepts integer effort and the documented context values', () => {
+    expect(parseSkillFile(skill('effort: 8000')).frontmatter.effort).toBe(8000);
+    expect(parseSkillFile(skill('context: inline')).frontmatter.context).toBe('inline');
+    expect(() => parseSkillFile(skill('context: forked'))).toThrow();
+    expect(() => parseSkillFile(skill('effort: 1.5'))).toThrow();
+  });
+
+  it('accepts the current agents/openai.yaml policy and dependency fields', () => {
+    const parsed = parseSkillFile(
+      skill(
+        'openai:\n  policy:\n    products: [codex, chatgpt]\n  dependencies:\n    tools:\n      - type: mcp\n        value: docs\n        command: docs-server\n        oauth:\n          callbackPort: 8765',
+      ),
+    ).frontmatter;
+    expect(openaiConfiguration(parsed)).toEqual({
+      policy: { products: ['codex', 'chatgpt'] },
+      dependencies: {
+        tools: [
+          { type: 'mcp', value: 'docs', command: 'docs-server', oauth: { callbackPort: 8765 } },
+        ],
+      },
+    });
+    expect(() => parseSkillFile(skill('openai:\n  policy:\n    products: [slack]'))).toThrow();
+  });
+});

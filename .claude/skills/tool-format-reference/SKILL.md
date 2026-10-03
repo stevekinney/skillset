@@ -51,7 +51,14 @@ to directory name): `name`, `description`, `when_to_use`, `argument-hint`,
 `arguments`, `disable-model-invocation`, `user-invocable`, `allowed-tools`,
 `disallowed-tools`, `model`, `effort` (low…max), `context: fork`, `agent`,
 `background` (v2.1.218+, with fork), `hooks`, `paths`, `shell`
-(bash|powershell). Booleans accept yes/no/on/off/1/0 since v2.1.218.
+(bash|powershell). Booleans (`disable-model-invocation`, `user-invocable`,
+`background`) accept 1/true/yes/on and 0/false/no/off, trimmed and
+case-insensitive, since v2.1.218; other values read as false. `effort` is
+low|medium|high|xhigh|max OR an integer. `context`: inline|fork (only fork
+acts). `disallowedTools` is accepted as an alias of `disallowed-tools`.
+`model: inherit` allowed. Skill frontmatter fields re-verified 2026-10-03
+against 2.1.288 (binary zod schema + docs + CHANGELOG); none added since
+2.1.221.
 `description` + `when_to_use` truncate at 1,536 chars in the listing.
 Body substitutions: `$ARGUMENTS`, `$ARGUMENTS[N]`/`$N` (0-based), named
 `$name`, `${CLAUDE_SESSION_ID}`, `${CLAUDE_EFFORT}`, `${CLAUDE_SKILL_DIR}`,
@@ -64,7 +71,14 @@ required; name lowercase+hyphens, no `:`): `tools`, `disallowedTools`,
 bypassPermissions|plan|manual), `maxTurns`, `skills` (preloads full content),
 `mcpServers`, `hooks` (Stop → SubagentStop), `memory` (user|project|local),
 `background` (default true since v2.1.198), `effort`, `isolation: worktree`,
-`color` (red|blue|green|yellow|purple|orange|pink|cyan), `initialPrompt`.
+`color` (red|blue|green|yellow|purple|orange|pink|cyan), `initialPrompt`,
+`omitClaudeMd` (2.1.271; skip user/project/local CLAUDE.md), and
+`experimental.cacheTtl` (5m|1h, 2.1.248). Re-verified 2026-10-03 against
+2.1.288: `isolation` accepts worktree|remote (binary; docs list only
+worktree); `effort` also takes an integer; `permissionMode: manual` is an
+alias for `default`; `background`/`omitClaudeMd` accept only true/false (bool
+or string) — NOT the skill yes/no/on/off spellings. Undocumented binary-only
+keys (not modeled): `observer`, `observerMessage`, `observeSubagents`.
 Precedence: managed > `--agents` flag > project > user > plugin.
 
 **MCP** (`mcpServers` in `~/.claude.json` user/local scope, `.mcp.json`
@@ -102,11 +116,17 @@ directly (import or symlink it).
 ## Codex CLI (0.146.x)
 
 **Skills**: `SKILL.md` frontmatter `name` + `description` (required),
-`metadata`, `arguments`, `allowed-tools` (documented). No body substitution
+`metadata`, `arguments`, `allowed-tools` (documented). Per codex-rs
+`skills/src/parser.rs` at 0.160.0, Codex only consumes `name`, `description`,
+and `metadata.short-description`; other keys are tolerated. Skill `model`
+was removed in 0.149.0 (#39068). No body substitution
 or inline-shell preprocessing (still true). Optional `agents/openai.yaml`:
 `interface` (`display_name`, `short_description`, `icon_small`, `icon_large`,
 `brand_color`, `default_prompt`), `policy.allow_implicit_invocation`
-(default true), `dependencies` (MCP server requirements). Discovery:
+(default true), `policy.products` (chatgpt|codex|atlas; source-only,
+undocumented), `dependencies.tools[]` (`type`, `value` required;
+`description`, `transport`, `url`, `command`, `oauth.callbackPort`). Parse
+failures make Codex ignore the file with a warning. Discovery:
 `$CWD/.agents/skills` → parents → `$REPO_ROOT/.agents/skills` →
 `~/.agents/skills` → `/etc/codex/skills` → built-ins, PLUS legacy
 `~/.codex/skills`. Per-skill enable/disable via config.toml `skills.config`.
@@ -114,8 +134,13 @@ or inline-shell preprocessing (still true). Optional `agents/openai.yaml`:
 **Agents** (`~/.codex/agents/*.toml`, project `.codex/agents/*.toml`;
 registry `[agents.<name>]` in config.toml with `description`/`config_file`):
 `name`, `description`, `developer_instructions` (multiline string), `model`,
-`model_reasoning_effort`, `model_verbosity`, `sandbox_mode` (read-only|
-workspace-write|danger-full-access), and per-agent `mcp_servers`,
+`model_reasoning_effort` (model-dependent non-empty string — none, minimal,
+low, medium, high, xhigh, max, ultra, … — not an enum), `model_verbosity`
+(low|medium|high), `sandbox_mode` (read-only|workspace-write|
+danger-full-access), `nickname_candidates` (verified in codex-rs
+`agent_role_config.rs` at 0.160.0, undocumented: non-empty, unique after
+trim, ASCII alphanumerics/space/-/_). Agent files use `deny_unknown_fields`
+with any config.toml key flattened in, and per-agent `mcp_servers`,
 `skills.config`, `tools`, `hooks` tables (documented; schemas match the
 global config forms, NOT Claude's same-named frontmatter). Global `[agents]`:
 `max_threads`/`max_concurrent_threads_per_session`, `enabled`, `max_depth`,

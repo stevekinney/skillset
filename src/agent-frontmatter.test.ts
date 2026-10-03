@@ -75,3 +75,45 @@ describe('impliedSandboxMode', () => {
     expect(impliedSandboxMode(undefined)).toBeUndefined();
   });
 });
+
+const agent = (fields: string): string => `---\nname: a\ndescription: b\n${fields}\n---\nbody\n`;
+
+describe('current Claude Code and Codex agent fields', () => {
+  it('accepts the fields added since Claude Code 2.1.221', () => {
+    const parsed = parseAgentFile(
+      agent('omitClaudeMd: true\nexperimental:\n  cacheTtl: 1h\nisolation: remote\neffort: 4000'),
+    ).frontmatter;
+    expect(claudeAgentFrontmatter(parsed)).toEqual({
+      name: 'a',
+      description: 'b',
+      omitClaudeMd: true,
+      experimental: { cacheTtl: '1h' },
+      isolation: 'remote',
+      effort: 4000,
+    });
+    expect(() => parseAgentFile(agent('experimental:\n  cacheTtl: 2h'))).toThrow();
+    expect(() => parseAgentFile(agent('isolation: container'))).toThrow();
+  });
+
+  it('accepts only true/false spellings for background', () => {
+    expect(parseAgentFile(agent('background: "false"')).frontmatter.background).toBe(false);
+    expect(parseAgentFile(agent('background: "true"')).frontmatter.background).toBe(true);
+    expect(() => parseAgentFile(agent('background: "yes"'))).toThrow();
+  });
+
+  it('validates the Codex verbosity and nickname fields like Codex does', () => {
+    expect(parseAgentFile(agent('codex:\n  model_verbosity: low')).frontmatter.codex).toEqual({
+      model_verbosity: 'low',
+    });
+    expect(() => parseAgentFile(agent('codex:\n  model_verbosity: loud'))).toThrow();
+    expect(() => parseAgentFile(agent('codex:\n  model_reasoning_effort: ""'))).toThrow();
+
+    expect(
+      parseAgentFile(agent('codex:\n  nickname_candidates: [Scout, Field_Agent-2]')).frontmatter
+        .codex?.nickname_candidates,
+    ).toEqual(['Scout', 'Field_Agent-2']);
+    for (const invalid of ['[]', '["  "]', '[Scout, " Scout "]', '[Scout!]']) {
+      expect(() => parseAgentFile(agent(`codex:\n  nickname_candidates: ${invalid}`))).toThrow();
+    }
+  });
+});

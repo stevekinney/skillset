@@ -1,15 +1,43 @@
 import { z } from 'zod';
 
-import { splitFrontmatter } from './frontmatter.js';
+import { claudeEffortSchema, splitFrontmatter } from './frontmatter.js';
 
 const stringOrStringList = z.union([z.string(), z.array(z.string())]);
 
+/**
+ * A subagent boolean as Claude Code reads it: a native boolean or the strings
+ * `"true"`/`"false"`. Unlike skill booleans, `yes`/`on`/`1` are not accepted.
+ */
+const claudeAgentBoolean = z.preprocess(
+  (value) => (value === 'true' ? true : value === 'false' ? false : value),
+  z.boolean(),
+);
+
+/**
+ * Codex's own nickname rules: a non-empty list of unique, non-blank names of
+ * ASCII letters, digits, spaces, `-`, and `_`, compared after trimming.
+ */
+const nicknameCandidatesSchema = z
+  .array(
+    z
+      .string()
+      .trim()
+      .min(1)
+      .regex(/^[A-Za-z0-9 _-]+$/),
+  )
+  .min(1)
+  .refine((names) => new Set(names).size === names.length, {
+    message: 'nickname candidates must be unique',
+  });
+
 const codexAgentSchema = z.object({
   model: z.string().optional(),
-  model_reasoning_effort: z.string().optional(),
-  model_verbosity: z.string().optional(),
+  // Model-dependent (Codex documents it as "a non-empty reasoning effort
+  // value advertised by the model"), so not an enum.
+  model_reasoning_effort: z.string().min(1).optional(),
+  model_verbosity: z.enum(['low', 'medium', 'high']).optional(),
   sandbox_mode: z.enum(['read-only', 'workspace-write', 'danger-full-access']).optional(),
-  nickname_candidates: z.array(z.string()).optional(),
+  nickname_candidates: nicknameCandidatesSchema.optional(),
   // Codex-native per-agent overrides, emitted verbatim as TOML tables. Codex
   // documents these on its subagent TOML; their schemas differ from Claude's
   // same-named frontmatter fields, so there is no automatic translation.
@@ -41,11 +69,13 @@ export const agentFrontmatterSchema = z.object({
   mcpServers: z.array(z.unknown()).optional(),
   hooks: z.record(z.string(), z.unknown()).optional(),
   memory: z.enum(['user', 'project', 'local']).optional(),
-  background: z.boolean().optional(),
-  effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).optional(),
-  isolation: z.literal('worktree').optional(),
+  background: claudeAgentBoolean.optional(),
+  effort: claudeEffortSchema.optional(),
+  isolation: z.enum(['worktree', 'remote']).optional(),
   color: z.enum(['red', 'blue', 'green', 'yellow', 'purple', 'orange', 'pink', 'cyan']).optional(),
   initialPrompt: z.string().optional(),
+  omitClaudeMd: claudeAgentBoolean.optional(),
+  experimental: z.object({ cacheTtl: z.enum(['5m', '1h']).optional() }).optional(),
 
   // Codex only — compiled to ~/.codex/agents/<name>.toml.
   codex: codexAgentSchema.optional(),
@@ -71,6 +101,8 @@ const CLAUDE_AGENT_KEYS = [
   'isolation',
   'color',
   'initialPrompt',
+  'omitClaudeMd',
+  'experimental',
 ] as const;
 
 /** Claude fields with no documented Codex equivalent — dropped from the TOML. */
@@ -80,6 +112,8 @@ export const CODEX_DROPPED_AGENT_KEYS = [
   'background',
   'isolation',
   'initialPrompt',
+  'omitClaudeMd',
+  'experimental',
 ] as const;
 
 /**
