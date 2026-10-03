@@ -110,6 +110,7 @@ describe('Codex hook output schemas', () => {
       },
     ],
     ['PreToolUse', { decision: 'block', reason: 'r' }],
+    ['PreToolUse', { continue: true, suppressOutput: false, systemMessage: 'm' }],
     [
       'PreToolUse',
       {
@@ -162,6 +163,10 @@ describe('Codex hook output schemas', () => {
     ['Stop', { hookSpecificOutput: { hookEventName: 'Stop' } }],
     ['PreCompact', { decision: 'block' }],
     ['Interrupt', { continue: false }],
+    // Universal values that make Codex fail a tool-event hook run.
+    ['PreToolUse', { suppressOutput: true }],
+    ['PermissionRequest', { continue: false }],
+    ['PostToolUse', { stopReason: 'halt' }],
   ];
 
   for (const [name, output] of rejected) {
@@ -169,6 +174,12 @@ describe('Codex hook output schemas', () => {
       expect(() => parseCodexHookOutput(name, output)).toThrow();
     });
   }
+
+  it('returns the output type of the event it parsed', () => {
+    const stop = parseCodexHookOutput('Stop', { decision: 'block', reason: 'again' });
+    const decision: 'block' | undefined = stop.decision;
+    expect(decision).toBe('block');
+  });
 
   it('accepts anything for SessionEnd because Codex never parses its stdout', () => {
     expect(parseCodexHookOutput('SessionEnd', 'free text')).toBe('free text');

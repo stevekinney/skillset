@@ -129,8 +129,10 @@ function checkTransport(name: string, server: McpServer): Issue[] {
   return issues;
 }
 
+/** Checks the timeout Claude receives, after the `claude:` override is merged. */
 function checkTimeout(name: string, server: McpServer): Issue[] {
-  if (server.timeout === undefined || server.timeout >= MINIMUM_CLAUDE_TIMEOUT) return [];
+  const timeout = claudeMcpEntry(server)['timeout'];
+  if (typeof timeout !== 'number' || timeout >= MINIMUM_CLAUDE_TIMEOUT) return [];
 
   return [
     {

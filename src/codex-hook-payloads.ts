@@ -161,13 +161,23 @@ export type CodexHookInputFor<Name extends CodexHookEventName> = z.infer<
 
 /**
  * The four fields flattened into ten events' output. `suppressOutput` is
- * parsed and discarded, and is an error on PreToolUse, PermissionRequest, and
- * PostToolUse.
+ * parsed and discarded.
  */
 const universalOutputShape = {
   continue: z.boolean().optional(),
   stopReason: z.string().optional(),
   suppressOutput: z.boolean().optional(),
+  systemMessage: z.string().optional(),
+};
+
+/**
+ * The universal fields as PreToolUse, PermissionRequest, and PostToolUse
+ * accept them: `continue: false`, any `stopReason`, and `suppressOutput: true`
+ * make Codex mark those runs failed, so they are rejected here.
+ */
+const toolEventUniversalOutputShape = {
+  continue: z.literal(true).optional(),
+  suppressOutput: z.literal(false).optional(),
   systemMessage: z.string().optional(),
 };
 
@@ -213,7 +223,7 @@ export const codexHookOutputSchemas = {
     hookSpecificOutput: specificOutput('UserPromptSubmit', additionalContext).optional(),
   }),
   PreToolUse: z.strictObject({
-    ...universalOutputShape,
+    ...toolEventUniversalOutputShape,
     // `approve` parses but Codex treats it as an unsupported value and fails the run.
     decision: z.enum(['approve', 'block']).optional(),
     reason: z.string().optional(),
@@ -226,7 +236,7 @@ export const codexHookOutputSchemas = {
     }).optional(),
   }),
   PermissionRequest: z.strictObject({
-    ...universalOutputShape,
+    ...toolEventUniversalOutputShape,
     hookSpecificOutput: specificOutput('PermissionRequest', {
       decision: z
         .strictObject({
@@ -241,7 +251,7 @@ export const codexHookOutputSchemas = {
     }).optional(),
   }),
   PostToolUse: z.strictObject({
-    ...universalOutputShape,
+    ...toolEventUniversalOutputShape,
     ...blockDecisionShape,
     hookSpecificOutput: specificOutput('PostToolUse', {
       ...additionalContext,
@@ -274,9 +284,10 @@ export function safeParseCodexHookInput(payload: unknown) {
 }
 
 /** Parse what a hook printed to stdout against the schema for the event it ran for. */
-export function parseCodexHookOutput(
-  eventName: CodexHookEventName,
+export function parseCodexHookOutput<Name extends CodexHookEventName>(
+  eventName: Name,
   payload: unknown,
-): CodexHookOutput {
+): CodexHookOutputFor<Name>;
+export function parseCodexHookOutput(eventName: CodexHookEventName, payload: unknown): unknown {
   return codexHookOutputSchemas[eventName].parse(payload);
 }

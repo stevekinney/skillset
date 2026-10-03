@@ -267,7 +267,10 @@ PostToolUse, PreCompact, PostCompact, UserPromptSubmit and required on
 SubagentStart/SubagentStop. Codex output structs use `deny_unknown_fields`, so
 one unknown key marks the run Failed: the exported output schemas are strict.
 SessionEnd stdout is never parsed (no schema). Interrupt output accepts only
-`systemMessage`. Compaction output is the four universal fields only. Stop and
+`systemMessage`. Compaction output is the four universal fields only. On
+PreToolUse, PermissionRequest, and PostToolUse, `continue: false`, any
+`stopReason`, and `suppressOutput: true` fail the run, so the exported schemas
+reject them there. Stop and
 SubagentStop have no `hookSpecificOutput`. PreToolUse `ask`/`approve` parse but
 fail the run, `allow` needs `updatedInput`, `deny` needs a reason; these
 semantic rules are documented, not encoded. Delta from 0.147 to 0.160: new

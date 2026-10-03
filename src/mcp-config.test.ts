@@ -144,6 +144,19 @@ describe('checkMcpSource merged entries', () => {
     ).toContain('error: server `a` Codex section: `args`');
   });
 
+  it('checks the timeout Claude actually receives after overrides', () => {
+    expect(
+      messages(
+        'servers:\n  a:\n    command: x\n    timeout: 5000\n    claude:\n      timeout: 30\n',
+      ).join('\n'),
+    ).toContain('warning: server `a` sets a timeout under 1000 ms');
+    expect(
+      messages(
+        'servers:\n  a:\n    command: x\n    timeout: 30\n    claude:\n      timeout: 5000\n',
+      ).join('\n'),
+    ).not.toContain('timeout under');
+  });
+
   it('warns about timeouts Claude ignores', () => {
     expect(messages('servers:\n  a:\n    command: x\n    timeout: 30\n').join('\n')).toContain(
       'warning: server `a` sets a timeout under 1000 ms',
