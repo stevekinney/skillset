@@ -293,3 +293,36 @@ describe('mcp command', () => {
     expect(await served).toBe(0);
   });
 });
+
+// stat, not Bun.file().exists(), which is false for any directory.
+const directoryExists = (path: string) =>
+  stat(path).then(
+    () => true,
+    () => false,
+  );
+
+describe('config directory overrides', () => {
+  it('syncs into CLAUDE_CONFIG_DIR and CODEX_HOME instead of the defaults', async () => {
+    const fixture = await makeFixture();
+    await addSkill(fixture, 'demo', validSkill);
+    await addAgent(fixture, 'reviewer', validAgent);
+    const claudeHome = join(fixture.root, 'claude-config');
+    const codexHome = join(fixture.root, 'codex-home');
+
+    const code = await runCli(['sync'], {
+      ...fixture.dependencies,
+      env: { NODE_ENV: 'test', CLAUDE_CONFIG_DIR: claudeHome, CODEX_HOME: codexHome },
+    });
+
+    expect(code).toBe(0);
+    expect(await Bun.file(join(claudeHome, 'skills', 'demo', 'SKILL.md')).exists()).toBe(true);
+    expect(await Bun.file(join(claudeHome, 'agents', 'reviewer.md')).exists()).toBe(true);
+    expect(await Bun.file(join(codexHome, 'agents', 'reviewer.toml')).exists()).toBe(true);
+    expect(
+      await Bun.file(join(fixture.home, '.agents', 'skills', 'demo', 'SKILL.md')).exists(),
+    ).toBe(true);
+    expect(await directoryExists(join(fixture.home, '.claude'))).toBe(false);
+    expect(await directoryExists(join(fixture.home, '.codex'))).toBe(false);
+    expect(await directoryExists(claudeHome)).toBe(true);
+  });
+});

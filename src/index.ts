@@ -50,7 +50,8 @@ export {
   type CodexHookOutputFor,
 } from './codex-hook-payloads.js';
 export { defaultDependencies, runCli, type CliDependencies } from './cli.js';
-export { runDoctorTargets, runImport, runSync, type RunContext } from './commands-run.js';
+export { runDoctorTargets, runImport, runSync } from './commands-run.js';
+export { createRunContext, type RunContext } from './run-context.js';
 export {
   getField,
   listEntries,

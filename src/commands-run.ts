@@ -12,22 +12,26 @@ import { readLedger, writeLedger, type Ledger, type LedgerItem } from './ledger.
 import { executeMcpApply, planMcpApply } from './mcp-apply.js';
 import { renderEmbeddedAction, renderSyncAction } from './render.js';
 import { executeSync, planSync, type SyncAction } from './sync.js';
+import type { RunContext } from './run-context.js';
 import { resolveTargets, type Targets } from './targets.js';
 
 /** What the command runners need from the outside world. */
-export type RunContext = {
-  cwd: string;
-  homeDirectory: string;
-  skillsetDirectory?: string | undefined;
-  log: (line: string) => void;
-};
-
 function contextTargets(invocation: Invocation, context: RunContext): Targets {
-  return resolveTargets(invocation.scope, context.homeDirectory, context.cwd);
+  return resolveTargets(
+    invocation.scope,
+    context.homeDirectory,
+    context.cwd,
+    context.configDirectories,
+  );
 }
 
 async function contextLedger(context: RunContext, targets: Targets): Promise<Ledger> {
-  const userTargets = resolveTargets('user', context.homeDirectory, context.cwd);
+  const userTargets = resolveTargets(
+    'user',
+    context.homeDirectory,
+    context.cwd,
+    context.configDirectories,
+  );
 
   return readLedger(targets.ledgerFile, {
     claudeMcpConfig: userTargets.claude.mcpConfig,
@@ -222,7 +226,12 @@ export async function targetStatuses(
   scope: Invocation['scope'],
   context: RunContext,
 ): Promise<TargetStatusRow[]> {
-  const targets = resolveTargets(scope, context.homeDirectory, context.cwd);
+  const targets = resolveTargets(
+    scope,
+    context.homeDirectory,
+    context.cwd,
+    context.configDirectories,
+  );
   const ledger = await contextLedger(context, targets);
 
   const rows: TargetStatusRow[] = [];

@@ -43,3 +43,52 @@ describe('resolveTargets', () => {
     expect(targets.claude.skills).toBe(join(homedir(), '.claude', 'skills'));
   });
 });
+
+describe('config directory overrides', () => {
+  it('relocates Claude Code’s config home and .claude.json with CLAUDE_CONFIG_DIR', () => {
+    const targets = resolveTargets('user', '/home/user', '/repo', {
+      claudeConfigDirectory: '/configuration/claude',
+    });
+    expect(targets.claude).toEqual({
+      skills: join('/configuration/claude', 'skills'),
+      agents: join('/configuration/claude', 'agents'),
+      mcpConfig: join('/configuration/claude', '.claude.json'),
+      instructions: join('/configuration/claude', 'CLAUDE.md'),
+      hooksConfig: join('/configuration/claude', 'settings.json'),
+      defaultsConfig: join('/configuration/claude', 'settings.json'),
+    });
+  });
+
+  it('relocates Codex files with CODEX_HOME, but not user skills', () => {
+    const targets = resolveTargets('user', '/home/user', '/repo', {
+      codexHome: '/configuration/codex',
+    });
+    expect(targets.codex).toEqual({
+      skills: join('/home/user', '.agents', 'skills'),
+      agents: join('/configuration/codex', 'agents'),
+      mcpConfig: join('/configuration/codex', 'config.toml'),
+      instructions: join('/configuration/codex', 'AGENTS.md'),
+      hooksConfig: join('/configuration/codex', 'hooks.json'),
+      defaultsConfig: join('/configuration/codex', 'config.toml'),
+    });
+  });
+
+  it('treats empty values as unset and resolves relative ones against the working directory', () => {
+    const plain = resolveTargets('user', '/home/user', '/repo');
+    expect(
+      resolveTargets('user', '/home/user', '/repo', { claudeConfigDirectory: '', codexHome: '' }),
+    ).toEqual(plain);
+    const relative = resolveTargets('user', '/home/user', '/repo', { codexHome: 'codex-home' });
+    expect(relative.codex.agents).toBe(join('/repo', 'codex-home', 'agents'));
+  });
+
+  it('leaves project scope and the ledger alone', () => {
+    const overrides = { claudeConfigDirectory: '/c', codexHome: '/x' };
+    expect(resolveTargets('project', '/home/user', '/repo', overrides)).toEqual(
+      resolveTargets('project', '/home/user', '/repo'),
+    );
+    expect(resolveTargets('user', '/home/user', '/repo', overrides).ledgerFile).toBe(
+      resolveTargets('user', '/home/user', '/repo').ledgerFile,
+    );
+  });
+});

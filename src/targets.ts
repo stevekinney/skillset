@@ -1,5 +1,5 @@
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import type { Target } from './frontmatter.js';
 
@@ -31,23 +31,50 @@ export type Targets = {
   ledgerFile: string;
 };
 
-function userTargets(home: string): Record<Target, ToolTargets> {
+/**
+ * The tools' own variables for moving their user-level configuration:
+ * `CLAUDE_CONFIG_DIR` and `CODEX_HOME`. Empty values count as unset.
+ */
+export type ConfigDirectoryOverrides = {
+  /** `CLAUDE_CONFIG_DIR`: replaces `~/.claude`, and holds `.claude.json` instead of the home directory. */
+  claudeConfigDirectory?: string | undefined;
+  /** `CODEX_HOME`: replaces `~/.codex`. User skills stay in `~/.agents/skills`. */
+  codexHome?: string | undefined;
+};
+
+function overrideDirectory(
+  value: string | undefined,
+  workingDirectory: string,
+): string | undefined {
+  return value ? resolve(workingDirectory, value) : undefined;
+}
+
+function userTargets(
+  home: string,
+  overrides: ConfigDirectoryOverrides,
+  workingDirectory: string,
+): Record<Target, ToolTargets> {
+  const claudeOverride = overrideDirectory(overrides.claudeConfigDirectory, workingDirectory);
+  const claudeHome = claudeOverride ?? join(home, '.claude');
+  const codexHome =
+    overrideDirectory(overrides.codexHome, workingDirectory) ?? join(home, '.codex');
+
   return {
     claude: {
-      skills: join(home, '.claude', 'skills'),
-      agents: join(home, '.claude', 'agents'),
-      mcpConfig: join(home, '.claude.json'),
-      instructions: join(home, '.claude', 'CLAUDE.md'),
-      hooksConfig: join(home, '.claude', 'settings.json'),
-      defaultsConfig: join(home, '.claude', 'settings.json'),
+      skills: join(claudeHome, 'skills'),
+      agents: join(claudeHome, 'agents'),
+      mcpConfig: join(claudeOverride ?? home, '.claude.json'),
+      instructions: join(claudeHome, 'CLAUDE.md'),
+      hooksConfig: join(claudeHome, 'settings.json'),
+      defaultsConfig: join(claudeHome, 'settings.json'),
     },
     codex: {
       skills: join(home, '.agents', 'skills'),
-      agents: join(home, '.codex', 'agents'),
-      mcpConfig: join(home, '.codex', 'config.toml'),
-      instructions: join(home, '.codex', 'AGENTS.md'),
-      hooksConfig: join(home, '.codex', 'hooks.json'),
-      defaultsConfig: join(home, '.codex', 'config.toml'),
+      agents: join(codexHome, 'agents'),
+      mcpConfig: join(codexHome, 'config.toml'),
+      instructions: join(codexHome, 'AGENTS.md'),
+      hooksConfig: join(codexHome, 'hooks.json'),
+      defaultsConfig: join(codexHome, 'config.toml'),
     },
   };
 }
@@ -76,14 +103,19 @@ function projectTargets(root: string): Record<Target, ToolTargets> {
 /**
  * Resolve every destination path for a scope. User scope writes into the
  * home directory; project scope writes into the working directory's repo
- * layout. The ledger always lives under the user's XDG config dir.
+ * layout. At user scope, `overrides` carries the tools' own `CLAUDE_CONFIG_DIR`
+ * and `CODEX_HOME`. The ledger always lives under the user's XDG config dir.
  */
 export function resolveTargets(
   scope: Scope,
   homeDirectory: string = homedir(),
   workingDirectory: string = process.cwd(),
+  overrides: ConfigDirectoryOverrides = {},
 ): Targets {
-  const tools = scope === 'user' ? userTargets(homeDirectory) : projectTargets(workingDirectory);
+  const tools =
+    scope === 'user'
+      ? userTargets(homeDirectory, overrides, workingDirectory)
+      : projectTargets(workingDirectory);
 
   return {
     scope,
