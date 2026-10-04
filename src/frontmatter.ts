@@ -1,6 +1,7 @@
 import { parse, stringify } from 'yaml';
 import { z } from 'zod';
 
+import { withoutByteOrderMark } from './byte-order-mark.js';
 import { claudeHookSettingsSchema } from './hook-schema.js';
 
 /** The two tools this package compiles skills for. */
@@ -170,8 +171,7 @@ const FRONTMATTER_PATTERN = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
  * @throws {Error} If the frontmatter fence is missing or the YAML is not a mapping.
  */
 export function splitFrontmatter(raw: string): { mapping: Record<string, unknown>; body: string } {
-  // A leading byte-order mark (common from Windows editors) would hide the `---` fence.
-  const text = raw.replace(/^\uFEFF/, '');
+  const text = withoutByteOrderMark(raw);
   const match = FRONTMATTER_PATTERN.exec(text);
   if (!match) throw new Error('missing YAML frontmatter (expected a leading `---` block)');
 

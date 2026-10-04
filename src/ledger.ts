@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
@@ -138,7 +138,9 @@ export async function readLedger(path: string, migration: LedgerMigration): Prom
  */
 export async function writeLedger(path: string, ledger: Ledger): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
-  const temporary = `${path}.${process.pid}.tmp`;
+  // Unique per write, so overlapping writes (or a stale file from a crashed run
+  // with the same PID) never share a temporary file.
+  const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`;
   try {
     await writeFile(temporary, `${JSON.stringify(ledger, undefined, 2)}\n`, {
       encoding: 'utf8',

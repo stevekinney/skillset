@@ -1,6 +1,7 @@
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
+import { withoutByteOrderMark } from './byte-order-mark.js';
 import { isMapping } from './frontmatter.js';
 
 /** A sync action against an entry embedded in a shared config file. */
@@ -21,8 +22,7 @@ export async function readJsonConfig(path: string): Promise<Record<string, unkno
   const raw = await readFile(path, 'utf8').catch(() => undefined);
   if (raw === undefined) return {};
 
-  // Windows editors often save JSON with a byte-order mark, which JSON.parse rejects.
-  const parsed: unknown = JSON.parse(raw.replace(/^\uFEFF/, ''));
+  const parsed: unknown = JSON.parse(withoutByteOrderMark(raw));
   if (!isMapping(parsed)) {
     throw new Error(`${path} is not a JSON object — refusing to edit it`);
   }

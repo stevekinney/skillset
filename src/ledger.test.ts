@@ -150,3 +150,16 @@ describe('a failed ledger write', () => {
     expect(entries).toEqual(['state.json']);
   });
 });
+
+describe('overlapping ledger writes', () => {
+  it('each use their own temporary file, so neither fails and nothing is left behind', async () => {
+    const path = await makePath();
+    const first = { version: 2 as const, items: {} };
+    const second = { version: 2 as const, items: {} };
+    await Promise.all([writeLedger(path, first), writeLedger(path, second)]);
+
+    const entries = await readdir(dirname(path));
+    expect(entries).toEqual(['state.json']);
+    expect(JSON.parse(await readFile(path, 'utf8'))).toEqual({ version: 2, items: {} });
+  });
+});
