@@ -31,6 +31,18 @@ export type SkillReport = {
 };
 
 const NAME_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+/** Device names Windows reserves for a file or folder, with or without an extension. */
+const WINDOWS_RESERVED_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
+
+function windowsReservedName(name: string, kind: 'skill' | 'agent'): Issue[] {
+  return WINDOWS_RESERVED_NAME.test(name)
+    ? [
+        warning(
+          `name \`${name}\` is reserved on Windows, so this ${kind} cannot be installed there`,
+        ),
+      ]
+    : [];
+}
 const XML_TAG_PATTERN = /<[^>]+>/;
 const RESERVED_NAME_WORDS = ['anthropic', 'claude'];
 const MAXIMUM_NAME_LENGTH = 64;
@@ -59,6 +71,7 @@ function checkName(name: string, directoryName: string): Issue[] {
   if (name !== directoryName) {
     issues.push(error(`name \`${name}\` must match its directory name \`${directoryName}\``));
   }
+  issues.push(...windowsReservedName(name, 'skill'));
 
   for (const word of RESERVED_NAME_WORDS) {
     if (name.includes(word)) {
@@ -316,6 +329,7 @@ export function checkAgent(agent: SourceAgent): AgentReport {
     issues.push(error('description must not be empty'));
   }
 
+  issues.push(...windowsReservedName(name, 'agent'));
   issues.push(
     ...checkHookFields(parsed.frontmatter.hooks),
     ...checkAgentBody(parsed),

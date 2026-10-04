@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'bun:test';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -106,5 +106,23 @@ describe('readLedger', () => {
 
     forgetItem(ledger, '/a');
     expect(ledger.items).toEqual({});
+  });
+});
+
+describe('ledger file permissions', () => {
+  // POSIX permission bits only; Windows has no owner/group/other modes.
+  const posix = process.platform !== 'win32';
+
+  it('is readable only by its owner, because it holds MCP env values and headers', async () => {
+    const path = await makePath();
+    await writeLedger(path, { version: 2, items: {} });
+    const created = await stat(path);
+    if (posix) expect(created.mode & 0o777).toBe(0o600);
+
+    await writeFile(path, '{}', { mode: 0o644 });
+    await chmod(path, 0o644);
+    await writeLedger(path, { version: 2, items: {} });
+    const rewritten = await stat(path);
+    if (posix) expect(rewritten.mode & 0o777).toBe(0o600);
   });
 });

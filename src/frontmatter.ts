@@ -170,13 +170,15 @@ const FRONTMATTER_PATTERN = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
  * @throws {Error} If the frontmatter fence is missing or the YAML is not a mapping.
  */
 export function splitFrontmatter(raw: string): { mapping: Record<string, unknown>; body: string } {
-  const match = FRONTMATTER_PATTERN.exec(raw);
+  // A leading byte-order mark (common from Windows editors) would hide the `---` fence.
+  const text = raw.replace(/^\uFEFF/, '');
+  const match = FRONTMATTER_PATTERN.exec(text);
   if (!match) throw new Error('missing YAML frontmatter (expected a leading `---` block)');
 
   const parsed: unknown = parse(match[1]!);
   if (!isMapping(parsed)) throw new Error('frontmatter must be a YAML mapping');
 
-  return { mapping: parsed, body: raw.slice(match[0].length) };
+  return { mapping: parsed, body: text.slice(match[0].length) };
 }
 
 /** Narrow an unknown value to a plain string-keyed mapping. */

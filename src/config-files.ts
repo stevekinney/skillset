@@ -21,7 +21,8 @@ export async function readJsonConfig(path: string): Promise<Record<string, unkno
   const raw = await readFile(path, 'utf8').catch(() => undefined);
   if (raw === undefined) return {};
 
-  const parsed: unknown = JSON.parse(raw);
+  // Windows editors often save JSON with a byte-order mark, which JSON.parse rejects.
+  const parsed: unknown = JSON.parse(raw.replace(/^\uFEFF/, ''));
   if (!isMapping(parsed)) {
     throw new Error(`${path} is not a JSON object — refusing to edit it`);
   }

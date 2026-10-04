@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 import type { Target } from './frontmatter.js';
@@ -131,7 +131,14 @@ export async function readLedger(path: string, migration: LedgerMigration): Prom
 /** Persist the ledger. */
 export async function writeLedger(path: string, ledger: Ledger): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, `${JSON.stringify(ledger, undefined, 2)}\n`, 'utf8');
+  // Owner-only: the ledger records full MCP entries, including `env` values and
+  // `headers`, which often carry tokens. `mode` only applies when the file is
+  // created, so an existing ledger is tightened too. (Windows ignores the bits.)
+  await writeFile(path, `${JSON.stringify(ledger, undefined, 2)}\n`, {
+    encoding: 'utf8',
+    mode: 0o600,
+  });
+  await chmod(path, 0o600);
 }
 
 /** Record a managed item (mutates the in-memory ledger). */

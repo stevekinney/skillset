@@ -306,3 +306,17 @@ describe('frontmatter hooks', () => {
     );
   });
 });
+
+describe('names Windows reserves', () => {
+  it('warns that a skill or agent named like a Windows device cannot be created there', () => {
+    const reserved = '---\nname: con\ndescription: Does a thing.\n---\n\nBody.\n';
+    expect(messages(skill(reserved, 'con'))).toContain(
+      'warning: name `con` is reserved on Windows, so this skill cannot be installed there',
+    );
+    const reservedAgent = '---\nname: com1\ndescription: Reviews diffs.\n---\n\nYou review.\n';
+    expect(agentMessages(agent(reservedAgent, 'com1'))).toContain(
+      'warning: name `com1` is reserved on Windows, so this agent cannot be installed there',
+    );
+    expect(messages(skill(valid)).join('\n')).not.toContain('reserved on Windows');
+  });
+});
