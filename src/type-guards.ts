@@ -12,6 +12,18 @@ import {
 } from './claude-session-record-schema.js';
 import { claudeWorkflowJournalRecordSchema } from './claude-session-workflow-journal.js';
 import {
+  claudeWorkflowAgentOptionsSchema,
+  claudeWorkflowOutputSchemaSchema,
+} from './claude-workflow-agent-options.js';
+import { claudeWorkflowMetaSchema } from './claude-workflow-meta.js';
+import { claudeWorkflowRunRecordSchema } from './claude-workflow-run-record.js';
+import {
+  claudeWorkflowBudgetSchema,
+  claudeWorkflowReferenceSchema,
+  claudeWorkflowToolInputSchema,
+  claudeWorkflowToolOutputSchema,
+} from './claude-workflow-tool.js';
+import {
   codexHookInputSchema,
   codexHookInputSchemas,
   codexHookOutputSchemas,
@@ -140,6 +152,30 @@ export const isClaudeSessionRecord = schemaGuard(claudeSessionRecordSchema);
 
 /** Whether a value is one record of a Claude Code workflow `journal.jsonl`. */
 export const isClaudeWorkflowJournalRecord = schemaGuard(claudeWorkflowJournalRecordSchema);
+
+/** Whether a value is a workflow script's `meta` block, once evaluated. */
+export const isClaudeWorkflowMeta = schemaGuard(claudeWorkflowMetaSchema);
+
+/** Whether a value is a valid `agent()` options object. */
+export const isClaudeWorkflowAgentOptions = schemaGuard(claudeWorkflowAgentOptionsSchema);
+
+/** Whether a value is a valid `agent()` output schema (a JSON Schema object root). */
+export const isClaudeWorkflowOutputSchema = schemaGuard(claudeWorkflowOutputSchemaSchema);
+
+/** Whether a value is a valid input of the `Workflow` tool. */
+export const isClaudeWorkflowToolInput = schemaGuard(claudeWorkflowToolInputSchema);
+
+/** Whether a value is a valid result of the `Workflow` tool. */
+export const isClaudeWorkflowToolOutput = schemaGuard(claudeWorkflowToolOutputSchema);
+
+/** Whether a value is a valid `workflow()` reference: a saved name or `{ scriptPath }`. */
+export const isClaudeWorkflowReference = schemaGuard(claudeWorkflowReferenceSchema);
+
+/** Whether a value has the shape of the script's `budget` global. */
+export const isClaudeWorkflowBudget = schemaGuard(claudeWorkflowBudgetSchema);
+
+/** Whether a value is a finished run's `wf_<id>.json` record. */
+export const isClaudeWorkflowRunRecord = schemaGuard(claudeWorkflowRunRecordSchema);
 
 /** Whether a value is one record (one line) of a Codex session rollout. */
 export const isCodexSessionRecord = schemaGuard(codexSessionRecordSchema);

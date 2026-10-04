@@ -18,10 +18,23 @@
       "import": "./dist/node/index.js",
       "default": "./dist/node/index.js"
     },
+    "./workflow-globals": {
+      "types": "./dist/claude-workflow-globals.d.ts",
+      "bun": "./dist/bun/claude-workflow-globals.js",
+      "import": "./dist/node/claude-workflow-globals.js",
+      "default": "./dist/node/claude-workflow-globals.js"
+    },
     "./package.json": "./package.json"
   },
   "main": "./dist/node/index.js",
   "types": "./dist/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "workflow-globals": [
+        "./dist/claude-workflow-globals.d.ts"
+      ]
+    }
+  },
   "bin": {
     "skillset": "dist/node/bin.js"
   },
@@ -36,6 +49,7 @@
     "check": "bun run format:check && bun run lint && bun run typecheck",
     "check:claude-sessions": "bun run scripts/check-claude-session-schema.ts",
     "check:codex-sessions": "bun run scripts/check-codex-session-schema.ts",
+    "check:workflows": "bun run scripts/check-workflow-schema.ts",
     "clean": "rm -rf dist coverage node_modules/.cache/tsconfig.tsbuildinfo node_modules/.cache/tsconfig.test.tsbuildinfo",
     "dev": "bun --watch run src/index.ts",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
@@ -60,6 +74,7 @@
   "dependencies": {
     "@lostgradient/environmentalist": "^0.0.4",
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "acorn": "^8.18.0",
     "chalk": "^6.0.0",
     "change-case": "^5.4.4",
     "smol-toml": "^1.7.1",
