@@ -1,4 +1,5 @@
-import { readdir, readFile, stat } from 'node:fs/promises';
+import type { Dirent } from 'node:fs';
+import { readdir, readFile, realpath, stat } from 'node:fs/promises';
 import { basename, join, relative } from 'node:path';
 
 /** A skill directory found in the source tree, with its raw SKILL.md. */
@@ -66,18 +67,62 @@ export function resolveSourceRoot(
   return skillsetDirectory ?? workingDirectory;
 }
 
-async function collectFiles(root: string, current: string, files: string[]): Promise<void> {
+/**
+ * What a directory entry really is, following a symlink to its target. A
+ * symlinked skill directory, agent file, or supporting folder is a common way to
+ * share sources; a broken link is nothing.
+ */
+async function entryKind(
+  directory: string,
+  entry: Dirent,
+): Promise<'file' | 'directory' | undefined> {
+  if (!entry.isSymbolicLink()) {
+    if (entry.isDirectory()) return 'directory';
+    return entry.isFile() ? 'file' : undefined;
+  }
+  const target = await stat(join(directory, entry.name)).catch((cause: unknown) => {
+    // Only a missing target means a broken link; any other failure (a
+    // permission error, say) would otherwise silently drop the source.
+    if (isMissing(cause)) return undefined;
+    throw cause;
+  });
+  if (target?.isDirectory()) return 'directory';
+
+  return target?.isFile() ? 'file' : undefined;
+}
+
+function isMissing(cause: unknown): boolean {
+  if (typeof cause !== 'object' || cause === null || !('code' in cause)) return false;
+
+  return cause.code === 'ENOENT' || cause.code === 'ENOTDIR';
+}
+
+async function collectFiles(
+  root: string,
+  current: string,
+  files: string[],
+  ancestors: Set<string> = new Set(),
+): Promise<void> {
+  // Only the directories on the current path: a link back to one of them is a
+  // cycle, while two links to the same directory elsewhere are both walked.
+  const real = await realpath(current);
+  if (ancestors.has(real)) return;
+  ancestors.add(real);
+
   const entries = await readdir(current, { withFileTypes: true });
 
   for (const entry of entries) {
     const path = join(current, entry.name);
+    const kind = await entryKind(current, entry);
 
-    if (entry.isDirectory()) {
-      await collectFiles(root, path, files);
-    } else {
+    if (kind === 'directory') {
+      await collectFiles(root, path, files, ancestors);
+    } else if (kind === 'file') {
       files.push(relative(root, path));
     }
   }
+
+  ancestors.delete(real);
 }
 
 async function isDirectory(path: string): Promise<boolean> {
@@ -97,7 +142,8 @@ export async function discoverSkills(skillsDirectory: string): Promise<SourceSki
   const entries = await readdir(skillsDirectory, { withFileTypes: true });
   const skills: SourceSkill[] = [];
 
-  for (const entry of entries.filter((candidate) => candidate.isDirectory())) {
+  for (const entry of entries) {
+    if ((await entryKind(skillsDirectory, entry)) !== 'directory') continue;
     const directory = join(skillsDirectory, entry.name);
     const raw = await readFile(join(directory, 'SKILL.md'), 'utf8').catch(() => undefined);
     if (raw === undefined) continue;
@@ -127,7 +173,8 @@ export async function discoverAgents(agentsDirectory: string): Promise<SourceAge
   const agents: SourceAgent[] = [];
 
   for (const entry of entries) {
-    if (!entry.isFile() || !entry.name.endsWith('.md')) continue;
+    if (!entry.name.endsWith('.md') || (await entryKind(agentsDirectory, entry)) !== 'file')
+      continue;
 
     const path = join(agentsDirectory, entry.name);
     agents.push({
