@@ -216,3 +216,12 @@ describe('workflow AST helpers', () => {
     expect(() => evaluateWorkflowLiteral(reference('A'))).toThrow('non-literal');
   });
 });
+
+describe('module loading', () => {
+  it('flags import(), which Claude Code rejects before the run starts', () => {
+    expect(findClaudeWorkflowForbiddenApis("const library = await import('lodash')")).toEqual({
+      ok: true,
+      usages: [{ api: 'import()', line: 1, column: 22 }],
+    });
+  });
+});

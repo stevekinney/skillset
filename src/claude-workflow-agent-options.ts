@@ -45,7 +45,8 @@ export const claudeWorkflowOutputSchemaSchema = z
   });
 export type ClaudeWorkflowOutputSchema = z.infer<typeof claudeWorkflowOutputSchemaSchema>;
 
-const toolNameList = z.array(z.string().min(1).trim());
+// Trim before the length check, so a name of only whitespace is rejected.
+const toolNameList = z.array(z.string().trim().min(1));
 
 /**
  * `agent()` options. `disallowedTools`, `bashCommandClamp`, and `stallMs` are

@@ -120,3 +120,29 @@ describe('checkClaudeWorkflowPhases', () => {
     });
   });
 });
+
+describe('values held in top-level constants and quoted keys', () => {
+  it('resolves phase titles and agent options stored in constants', () => {
+    const result = extractClaudeWorkflowCalls(
+      "const PHASE = 'Scan'\nconst OPTIONS = { effort: 'low', phase: 'Scan' }\nphase(PHASE)\nagent('x', OPTIONS)",
+    );
+    if (!result.ok) throw new Error('expected the script to parse');
+    expect(result.phases.map((phase) => phase.title)).toEqual(['Scan', 'Scan']);
+    expect(result.agents.map((agent) => agent.options)).toEqual([{ effort: 'low', phase: 'Scan' }]);
+    expect(result.agentsWithoutLiteralOptions).toBe(0);
+  });
+
+  it('skips a computed option key instead of failing the whole extraction', () => {
+    const result = extractClaudeWorkflowCalls(
+      "const key = 'label'\nagent('x', { [key]: 'y', phase: 'Scan' })",
+    );
+    if (!result.ok) throw new Error('expected the script to parse');
+    expect(result.phases.map((phase) => phase.title)).toEqual(['Scan']);
+  });
+
+  it('recognizes a quoted phase option key', () => {
+    const result = extractClaudeWorkflowCalls("agent('x', { 'phase': 'Scan' })");
+    if (!result.ok) throw new Error('expected the script to parse');
+    expect(result.phases.map((phase) => phase.title)).toEqual(['Scan']);
+  });
+});

@@ -276,3 +276,14 @@ describe('claudeWorkflowGlobalNames', () => {
     );
   });
 });
+
+describe('disallowedTools names', () => {
+  it('rejects a name that is empty once trimmed', () => {
+    expect(claudeWorkflowAgentOptionsSchema.safeParse({ disallowedTools: ['   '] }).success).toBe(
+      false,
+    );
+    expect(
+      claudeWorkflowAgentOptionsSchema.safeParse({ disallowedTools: [' Bash '] }).success,
+    ).toBe(true);
+  });
+});

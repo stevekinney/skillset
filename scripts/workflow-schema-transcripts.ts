@@ -135,7 +135,14 @@ function checkTranscriptRecord(
 
 /** Whether a line can hold a Workflow call, or the result of one still awaiting its verdict. */
 function isRelevant(line: string, pending: Map<string, Pending>): boolean {
-  if (line.includes('"name":"Workflow"') || line.includes('"status":"async_launched"')) return true;
+  // Both launch statuses are Workflow tool outputs: a local run and a remote one.
+  if (
+    line.includes('"name":"Workflow"') ||
+    line.includes('"status":"async_launched"') ||
+    line.includes('"status":"remote_launched"')
+  ) {
+    return true;
+  }
   return pending.size > 0 && line.includes('"tool_result"');
 }
 

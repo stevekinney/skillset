@@ -58,6 +58,14 @@ assertType<
     }
   >
 >();
+// A `required` list widened to `string[]` (from `satisfies`, say) names no
+// particular key, so every property stays optional rather than all required.
+type WidenedRequired = {
+  type: 'object';
+  properties: { name: { type: 'string' } };
+  required: string[];
+};
+assertType<Equal<ClaudeWorkflowSchemaResult<WidenedRequired>, { name?: string }>>();
 assertType<Equal<ClaudeWorkflowSchemaResult<{ type: 'object' }>, Record<string, unknown>>>();
 assertType<Equal<ClaudeWorkflowSchemaResult<{ type: 'array' }>, unknown[]>>();
 assertType<Equal<ClaudeWorkflowSchemaResult<{ const: 'x' }>, 'x'>>();

@@ -93,7 +93,7 @@ export function parseClaudeWorkflowMeta(source: string): ClaudeWorkflowMetaResul
 
 /** A call the runtime makes throw, which would break a resumed run. */
 export type ClaudeWorkflowForbiddenApi = {
-  api: 'Date.now' | 'Math.random' | 'new Date()';
+  api: 'Date.now' | 'Math.random' | 'new Date()' | 'import()';
   line: number;
   column: number;
 };
@@ -102,6 +102,7 @@ export type ClaudeWorkflowForbiddenApiResult =
   { ok: true; usages: ClaudeWorkflowForbiddenApi[] } | { ok: false; error: string };
 
 function forbiddenApi(node: WorkflowNode): ClaudeWorkflowForbiddenApi['api'] | undefined {
+  if (node.type === 'ImportExpression') return 'import()';
   if (node.type === 'MemberExpression' && !node['computed']) {
     const api = `${identifierName(childNode(node, 'object'))}.${identifierName(childNode(node, 'property'))}`;
     return api === 'Date.now' || api === 'Math.random' ? api : undefined;
@@ -114,10 +115,12 @@ function forbiddenApi(node: WorkflowNode): ClaudeWorkflowForbiddenApi['api'] | u
 }
 
 /**
- * Find `Date.now`, `Math.random`, and `new Date()` with no arguments. Claude
- * Code makes all three throw inside a script, because they would make a resumed
- * run call different agents. Like the runtime, it flags only the plain spelling
- * (`Date.now`, not `Date['now']`).
+ * Find what Claude Code won't run in a script: `Date.now`, `Math.random`, and
+ * `new Date()` with no arguments, which it makes throw because they would make a
+ * resumed run call different agents, and `import()`, which fails the script
+ * before the run starts (the body is plain JavaScript with no module loading).
+ * Like the runtime, it flags only the plain spelling (`Date.now`, not
+ * `Date['now']`).
  */
 export function findClaudeWorkflowForbiddenApis(source: string): ClaudeWorkflowForbiddenApiResult {
   const parsed = parseWorkflowProgram(source);

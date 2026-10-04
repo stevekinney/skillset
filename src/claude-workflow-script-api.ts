@@ -30,7 +30,13 @@ type PrimitiveTypes = {
   null: null;
 };
 
-type RequiredKeys<Schema> = Schema extends { required: readonly (infer Key)[] } ? Key : never;
+// Only literal keys make a property required. A list widened to `string[]` names
+// no particular key, so it leaves every property optional rather than all required.
+type RequiredKeys<Schema> = Schema extends { required: readonly (infer Key)[] }
+  ? string extends Key
+    ? never
+    : Key
+  : never;
 
 type ObjectResult<Schema> = Schema extends { properties: infer Properties }
   ? Simplify<

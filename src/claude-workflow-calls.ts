@@ -84,6 +84,15 @@ function stringOrUndefined(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
+/** A property's literal name (identifier or quoted), or `undefined` for a computed one. */
+function propertyNameOrUndefined(property: WorkflowNode): string | undefined {
+  try {
+    return literalPropertyName(property);
+  } catch {
+    return undefined;
+  }
+}
+
 function recordAgent(
   found: Found,
   call: WorkflowNode,
@@ -93,7 +102,7 @@ function recordAgent(
   const evaluated = evaluateOptions(options, resolve);
   found.agents.push({ ...nodeLocation(call), ...evaluated });
   const phaseProperty = childNodes(options, 'properties').find(
-    (property) => property && identifierName(childNode(property, 'key')) === 'phase',
+    (property) => property?.type === 'Property' && propertyNameOrUndefined(property) === 'phase',
   );
   if (phaseProperty)
     found.phases.push({
@@ -103,17 +112,26 @@ function recordAgent(
     });
 }
 
+/** An `agent()` options argument: a literal, or a top-level constant holding one. */
+function resolvedOptions(
+  argument: WorkflowNode | null | undefined,
+  resolve: WorkflowIdentifierResolver,
+): WorkflowNode | null | undefined {
+  return argument?.type === 'Identifier' ? resolve(identifierName(argument) ?? '') : argument;
+}
+
 function recordCall(found: Found, call: WorkflowNode, resolve: WorkflowIdentifierResolver) {
   const name = identifierName(childNode(call, 'callee'));
   const [first, second] = childNodes(call, 'arguments');
-  if (name === 'agent' && second?.type === 'ObjectExpression') {
-    recordAgent(found, call, second, resolve);
+  const options = resolvedOptions(second, resolve);
+  if (name === 'agent' && options?.type === 'ObjectExpression') {
+    recordAgent(found, call, options, resolve);
   } else if (name === 'agent') {
     found.agentsWithoutLiteralOptions += 1;
   } else if (name === 'phase') {
     found.phases.push({
       ...nodeLocation(call),
-      title: stringOrUndefined(literalOrUndefined(first)),
+      title: stringOrUndefined(literalOrUndefined(first, resolve)),
       source: 'phase-call',
     });
   } else if (name === 'workflow') {
