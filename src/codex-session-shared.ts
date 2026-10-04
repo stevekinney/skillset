@@ -21,8 +21,12 @@ export function openEnum<const Values extends readonly [string, ...string[]]>(va
   return z.union([z.enum(values), z.string()]);
 }
 
-/** `ReasoningEffort`; Rust also has an open `Custom(String)` variant, not modeled here. */
-export const reasoningEffortSchema = z.enum([
+/**
+ * `ReasoningEffort`. Rust writes a `Custom(String)` variant as the bare string
+ * (`codex-rs/protocol/src/openai_models.rs`), so the set is open: the nine
+ * built-in levels plus any string a model or a newer Codex defines.
+ */
+export const reasoningEffortSchema = openEnum([
   'none',
   'minimal',
   'low',

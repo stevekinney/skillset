@@ -19,11 +19,14 @@ function sortedEntries<Value>(map: Record<string, Value>, weigh: (value: Value) 
   );
 }
 
-/** Identifiers are never printed, however short their tally. */
-const identifierPath = /(?:_id|Id|\.id|_ids|_hash)(?:\[\])?$/;
+/**
+ * Identifiers and search-result content are never printed, however short their
+ * tally: a subset run can otherwise show a handful of real values.
+ */
+const withheldPath = /(?:_id|Id|\.id|_ids|_hash|\.domain|\.url|\.title|\.snippet)(?:\[\])?$/;
 
 function printable(key: string, tally: ValueTally): boolean {
-  return !identifierPath.test(key) && isPrintableTally(tally);
+  return !withheldPath.test(key) && isPrintableTally(tally);
 }
 
 function describeValues(key: string, tally: ValueTally): string {

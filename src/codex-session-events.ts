@@ -23,7 +23,10 @@ import { turnItemSchema } from './codex-session-turn-items.js';
  * only some events: seven are verified against real data (`item_completed`,
  * `task_started`, `task_complete`, `token_count`, `turn_aborted`,
  * `thread_goal_updated`, `thread_settings_applied`) and `thread_rolled_back` is
- * modeled from source, unverified by data.
+ * modeled from source, unverified by data. `CodexErrorInfo` follows its wire
+ * definition in `codex-rs/protocol/src/codex_error_info.rs` (externally tagged,
+ * snake_case); real data holds only its bare-string variants, so the five
+ * variants that carry an HTTP status code or turn kind are unverified by data.
  *
  * The rest of `EventMsg` is written only by rollouts whose `history_mode` is
  * `legacy` (Codex 0.160 writes `paginated` ones, and so does every rollout on

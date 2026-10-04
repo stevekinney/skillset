@@ -190,6 +190,15 @@ describe('other record types', () => {
     }
   });
 
+  it('keeps a reasoning effort or multi-agent mode it has never seen', () => {
+    const payload = {
+      ...otherPayloads.turn_context,
+      effort: 'a_future_level',
+      multi_agent_mode: 'a_custom_mode',
+    };
+    expect(safeParseCodexSessionRecord(recordFor('turn_context', payload)).success).toBe(true);
+  });
+
   it('rejects an approval policy outside the closed set', () => {
     const payload = { ...otherPayloads.turn_context, approval_policy: 'sometimes' };
     expect(safeParseCodexSessionRecord(recordFor('turn_context', payload)).success).toBe(false);
