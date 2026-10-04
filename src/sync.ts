@@ -1,4 +1,4 @@
-import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, lstat, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 
 import { emitClaudeAgent, emitCodexAgent, GENERATED_MARKER_TOML } from './agent-emit.js';
@@ -113,6 +113,19 @@ async function resolveAction(
   return 'overwrite';
 }
 
+/**
+ * Whether something already occupies `path`, asked of the file system rather
+ * than matched against a directory listing. On a case-insensitive file system
+ * (macOS, Windows) `review` and a hand-installed `Review` are the same entry, and
+ * a case-sensitive name comparison would plan a write that deletes it.
+ */
+async function pathExists(path: string): Promise<boolean> {
+  return lstat(path).then(
+    () => true,
+    () => false,
+  );
+}
+
 async function listDirectories(root: string): Promise<string[]> {
   const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
 
@@ -153,13 +166,7 @@ async function planSkillActions(
       kind: 'skill',
       name: skill.source.name,
       path,
-      action: await resolveAction(
-        'skill',
-        path,
-        directories.includes(skill.source.name),
-        ledger,
-        options.force,
-      ),
+      action: await resolveAction('skill', path, await pathExists(path), ledger, options.force),
     });
   }
 
@@ -195,7 +202,7 @@ async function planAgentActions(
       kind: 'agent',
       name: agent.source.name,
       path,
-      action: await resolveAction('agent', path, files.includes(fileName), ledger, options.force),
+      action: await resolveAction('agent', path, await pathExists(path), ledger, options.force),
     });
   }
 

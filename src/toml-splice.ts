@@ -17,6 +17,19 @@ function headerName(line: string): string | undefined {
     .join('.');
 }
 
+/**
+ * The line ending a file already uses. Lines are split on either ending and
+ * rejoined with this one, so an LF or CRLF file keeps every untouched byte (a
+ * file that mixes both is written back with CRLF throughout).
+ */
+function lineEndingOf(contents: string): string {
+  return contents.includes('\r\n') ? '\r\n' : '\n';
+}
+
+function splitLines(contents: string): string[] {
+  return contents.split(/\r?\n/);
+}
+
 function belongsToSection(name: string, section: string): boolean {
   return name === section || name.startsWith(`${section}.`);
 }
@@ -58,23 +71,24 @@ export function spliceTomlSection(
   section: string,
   replacement: string | undefined,
 ): string {
-  const lines = contents.split('\n');
+  const lines = splitLines(contents);
+  const eol = lineEndingOf(contents);
   const spans = sectionSpans(lines, section);
   const replacementLines = replacement === undefined ? [] : replacement.trimEnd().split('\n');
 
   if (spans.length === 0) {
-    return replacementLines.length === 0 ? contents : appendSection(lines, replacementLines);
+    return replacementLines.length === 0 ? contents : appendSection(lines, replacementLines, eol);
   }
 
-  return replaceSpans(lines, spans, replacementLines);
+  return replaceSpans(lines, spans, replacementLines, eol);
 }
 
-function appendSection(lines: string[], replacementLines: string[]): string {
+function appendSection(lines: string[], replacementLines: string[], eol: string): string {
   const output = [...lines];
   while (output.length > 0 && output.at(-1) === '') output.pop();
   if (output.length > 0) output.push('');
 
-  return [...output, ...replacementLines, ''].join('\n');
+  return [...output, ...replacementLines, ''].join(eol);
 }
 
 /**
@@ -84,7 +98,8 @@ function appendSection(lines: string[], replacementLines: string[]): string {
  * other lines are untouched.
  */
 export function spliceTomlScalar(contents: string, key: string, value: string | undefined): string {
-  const lines = contents.split('\n');
+  const lines = splitLines(contents);
+  const eol = lineEndingOf(contents);
   const firstHeader = lines.findIndex((line) => headerName(line) !== undefined);
   const topEnd = firstHeader === -1 ? lines.length : firstHeader;
   const assignment = new RegExp(String.raw`^\s*${key}\s*=`);
@@ -98,7 +113,7 @@ export function spliceTomlScalar(contents: string, key: string, value: string | 
       output[existing] = `${key} = ${value}`;
     }
 
-    return output.join('\n');
+    return output.join(eol);
   }
 
   if (value === undefined) return contents;
@@ -108,10 +123,15 @@ export function spliceTomlScalar(contents: string, key: string, value: string | 
   while (insertAt > 0 && output[insertAt - 1] === '') insertAt -= 1;
   output.splice(insertAt, 0, `${key} = ${value}`);
 
-  return output.join('\n');
+  return output.join(eol);
 }
 
-function replaceSpans(lines: string[], spans: Span[], replacementLines: string[]): string {
+function replaceSpans(
+  lines: string[],
+  spans: Span[],
+  replacementLines: string[],
+  eol: string,
+): string {
   const excluded = new Set<number>();
   for (const span of spans) {
     for (let index = span.start; index < span.end; index += 1) excluded.add(index);
@@ -125,5 +145,5 @@ function replaceSpans(lines: string[], spans: Span[], replacementLines: string[]
     if (!excluded.has(index)) output.push(line);
   }
 
-  return output.join('\n');
+  return output.join(eol);
 }
