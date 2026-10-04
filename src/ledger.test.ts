@@ -68,16 +68,37 @@ describe('keys and hashing', () => {
   });
 });
 
+/** What a promise rejects with, or `undefined` if it resolves. */
+const rejection = (promise: Promise<unknown>) =>
+  promise.then(
+    () => undefined,
+    (cause: unknown) => cause,
+  );
+
 describe('readLedger', () => {
-  it('starts fresh for missing or malformed files', async () => {
+  it('starts fresh only when there is no ledger yet', async () => {
     expect(await readLedger('/nowhere/state.json', migration)).toEqual({ version: 2, items: {} });
+  });
 
+  // An empty ledger forgets what skillset owns, and the next write would make
+  // that permanent, so a ledger that can't be read stops the run instead.
+  it.each([
+    ['is not JSON', 'not json'],
+    ['is from an unknown version', JSON.stringify({ version: 99 })],
+    ['is not an object', '[]'],
+    ['has malformed items', JSON.stringify({ version: 2, items: { a: 1 } })],
+  ])('refuses a ledger that %s', async (_case, contents) => {
     const path = await makePath();
-    await writeFile(path, 'not json');
-    expect(await readLedger(path, migration)).toEqual({ version: 2, items: {} });
+    await writeFile(path, contents);
+    expect(String(await rejection(readLedger(path, migration)))).toContain(path);
+  });
 
-    await writeFile(path, JSON.stringify({ version: 99 }));
-    expect(await readLedger(path, migration)).toEqual({ version: 2, items: {} });
+  it('refuses an unreadable legacy ledger too', async () => {
+    const legacy = await makePath();
+    await writeFile(legacy, 'not json');
+    expect(String(await rejection(readLedger(`${legacy}.current`, migration, legacy)))).toContain(
+      legacy,
+    );
   });
 
   it('migrates the v1 mcp state shape onto the default config paths', async () => {

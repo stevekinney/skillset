@@ -2,6 +2,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { chmod, mkdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
+import { z } from 'zod';
+
 import { readIfExists } from './read-if-exists.js';
 import { retryOnWindowsLock } from './file-retry.js';
 import type { Target } from './frontmatter.js';
@@ -105,39 +107,81 @@ function migrateV1(parsed: Record<string, unknown>, migration: LedgerMigration):
   return ledger;
 }
 
+const ledgerItemSchema = z.looseObject({
+  kind: z.enum(['skill', 'agent', 'mcp-server', 'instructions', 'hook', 'default']),
+  name: z.string(),
+  scope: z.enum(['user', 'project']),
+  target: z.enum(['claude', 'codex']),
+  hash: z.string(),
+  syncedAt: z.string(),
+  entry: z.unknown().optional(),
+});
+
+const ledgerSchema = z.looseObject({
+  version: z.literal(2),
+  items: z.record(z.string(), ledgerItemSchema),
+});
+
 function isLedger(value: unknown): value is Ledger {
-  return isMapping(value) && value['version'] === 2 && isMapping(value['items']);
+  return ledgerSchema.safeParse(value).success;
+}
+
+/** The ledger's location and contents, falling back to the legacy location. */
+async function readLedgerFile(
+  path: string,
+  legacyPath: string | undefined,
+): Promise<{ source: string; raw: string | undefined }> {
+  // Until the ledger has been written at its current location, the one at the
+  // previous location is the record of what skillset owns.
+  const current = await readIfExists(path);
+  if (current !== undefined || legacyPath === undefined || legacyPath === path) {
+    return { source: path, raw: current };
+  }
+
+  return { source: legacyPath, raw: await readIfExists(legacyPath) };
+}
+
+// Treating an unreadable ledger as empty would forget what skillset owns, and
+// the next write would make that permanent.
+function unreadableLedger(source: string, reason: string): Error {
+  return new Error(
+    `the ledger at ${source} ${reason}, so skillset can't tell which outputs it owns. Fix it, or move it aside to start over (everything already installed is then treated as hand-installed).`,
+  );
+}
+
+function parseLedger(raw: string, source: string, migration: LedgerMigration): Ledger {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw unreadableLedger(source, 'is not valid JSON');
+  }
+
+  if (isLedger(parsed)) return parsed;
+  if (isMapping(parsed) && parsed['version'] === undefined) return migrateV1(parsed, migration);
+
+  throw unreadableLedger(
+    source,
+    isMapping(parsed) && parsed['version'] !== 2
+      ? `has version ${JSON.stringify(parsed['version'])}, which this skillset doesn't know`
+      : "isn't in a format skillset recognizes",
+  );
 }
 
 /**
- * Read the ledger, migrating a milestone-2 MCP state file (v1) in place and
- * starting fresh on anything unreadable.
+ * Read the ledger, migrating a milestone-2 MCP state file (v1) in place. No
+ * ledger yet is an empty one; a ledger that exists but can't be understood is
+ * an error, never an empty ledger.
  */
 export async function readLedger(
   path: string,
   migration: LedgerMigration,
   legacyPath?: string,
 ): Promise<Ledger> {
-  // Until the ledger has been written at its current location, the one at the
-  // previous location is the record of what skillset owns.
-  const current = await readIfExists(path);
-  const raw =
-    current === undefined && legacyPath !== undefined && legacyPath !== path
-      ? await readIfExists(legacyPath)
-      : current;
+  const { source, raw } = await readLedgerFile(path, legacyPath);
   if (raw === undefined) return { version: 2, items: {} };
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return { version: 2, items: {} };
-  }
-
-  if (isLedger(parsed)) return parsed;
-  if (isMapping(parsed) && parsed['version'] === undefined) return migrateV1(parsed, migration);
-
-  return { version: 2, items: {} };
+  return parseLedger(raw, source, migration);
 }
 
 /**

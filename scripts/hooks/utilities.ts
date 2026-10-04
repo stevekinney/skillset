@@ -1,19 +1,28 @@
 import { $ } from 'bun';
-import chalk from 'chalk';
-import { capitalCase } from 'change-case';
+import { styleText } from 'node:util';
+
+// Only Bun and Node built-ins here: hooks run in a fresh clone or worktree
+// before `bun install` has, so a package import would crash every hook.
 
 export const isContinuousIntegration = () =>
   process.env['CI'] === 'true' || process.env['CI'] === '1';
 
+/** "post-checkout" → "Post Checkout". */
+const titleCase = (text: string) =>
+  text
+    .split(/[^a-z0-9]+/i)
+    .filter(Boolean)
+    .map((word) => word[0]!.toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+
 export function header(title: string) {
-  const text = capitalCase(title);
-  console.log('\n' + chalk.bgBlue.black(` ${text} `));
+  console.log('\n' + styleText(['bgBlue', 'black'], ` ${titleCase(title)} `));
 }
 
-export const info = (msg: string) => console.log(chalk.cyan(msg));
-export const success = (msg: string) => console.log(chalk.green(msg));
-export const warning = (msg: string) => console.log(chalk.yellow(msg));
-export const error = (msg: string) => console.error(chalk.red(msg));
+export const info = (msg: string) => console.log(styleText('cyan', msg));
+export const success = (msg: string) => console.log(styleText('green', msg));
+export const warning = (msg: string) => console.log(styleText('yellow', msg));
+export const error = (msg: string) => console.error(styleText('red', msg));
 
 export async function getStagedFiles(): Promise<string[]> {
   const out = await $`git diff --cached --name-only`.text();

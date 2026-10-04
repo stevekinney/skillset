@@ -117,4 +117,8 @@ keys can live alongside each entry (the schemas would gain an optional
   the first write of a run.
 - The ledger is the only cross-run state; deleting it degrades gracefully
   (markers still prevent clobbering hand-installed files; drift detection
-  falls back to "unverifiable, treated as managed").
+  falls back to "unverifiable, treated as managed"). A ledger that exists but
+  can't be read (invalid JSON, an unknown version, malformed items) is
+  different: every command that loads it fails with an error naming the file,
+  rather than silently starting empty and overwriting the record on the next
+  sync.
