@@ -81,25 +81,116 @@ function scopeNames(node: WorkflowNode): string[] {
  * a call whose name a parameter, local declaration, or catch or loop binding
  * shadows (`function run(agent) { agent() }`) invokes that binding instead, so
  * it is skipped. A top-level declaration shadows the global for the whole script.
+ *
+ * `visit` also receives the names bound by enclosing function and block scopes
+ * (not the program's own top level), so a caller resolving a top-level constant
+ * at the call site can see that a local binding hides it.
  */
 export function walkWorkflowGlobalCalls(
   program: WorkflowNode,
   globals: ReadonlySet<string>,
-  visit: (call: WorkflowNode, name: string) => void,
+  visit: (call: WorkflowNode, name: string, localNames: ReadonlySet<string>) => void,
 ): void {
-  const walk = (node: WorkflowNode, shadowed: ReadonlySet<string>): void => {
-    const names = scopeNames(node).filter((name) => globals.has(name));
-    const inScope = names.length > 0 ? new Set([...shadowed, ...names]) : shadowed;
-
-    if (node.type === 'CallExpression') {
-      const name = identifierName(childNode(node, 'callee'));
-      if (name !== undefined && globals.has(name) && !inScope.has(name)) visit(node, name);
+  const walk = (node: WorkflowNode, outer: Scopes): void => {
+    const scopes = enterScope(node, outer, globals);
+    const name =
+      node.type === 'CallExpression' ? identifierName(childNode(node, 'callee')) : undefined;
+    if (name !== undefined && globals.has(name) && !scopes.shadowedGlobals.has(name)) {
+      visit(node, name, scopes.localNames);
     }
-    for (const value of Object.values(node)) {
-      for (const item of Array.isArray(value) ? value : [value]) {
-        if (isNode(item)) walk(item, inScope);
-      }
-    }
+    forEachChild(node, (child) => walk(child, scopes));
   };
-  walk(program, new Set());
+  walk(program, { shadowedGlobals: new Set(), localNames: new Set() });
+}
+
+type Scopes = { shadowedGlobals: ReadonlySet<string>; localNames: ReadonlySet<string> };
+
+/**
+ * The scopes inside `node`. Any binding of a global's name shadows it; only
+ * bindings below the program's top level count as local names, since top-level
+ * constants are what a resolver looks up.
+ */
+function enterScope(node: WorkflowNode, outer: Scopes, globals: ReadonlySet<string>): Scopes {
+  const names = scopeNames(node);
+  if (names.length === 0) return outer;
+  const globalNames = names.filter((name) => globals.has(name));
+  return {
+    shadowedGlobals:
+      globalNames.length > 0
+        ? new Set([...outer.shadowedGlobals, ...globalNames])
+        : outer.shadowedGlobals,
+    localNames:
+      node.type === 'Program' ? outer.localNames : new Set([...outer.localNames, ...names]),
+  };
+}
+
+function forEachChild(node: WorkflowNode, visit: (child: WorkflowNode) => void): void {
+  for (const value of Object.values(node)) {
+    for (const item of Array.isArray(value) ? value : [value]) if (isNode(item)) visit(item);
+  }
+}
+
+/** The identifier at the root of a member chain: `options` in `options.schema.type`. */
+function memberRoot(node: WorkflowNode | undefined): string | undefined {
+  let current = node;
+  while (current?.type === 'MemberExpression') current = childNode(current, 'object');
+  return current?.type === 'Identifier' ? identifierName(current) : undefined;
+}
+
+const objectMutators = new Set(['assign', 'defineProperty', 'defineProperties', 'setPrototypeOf']);
+
+/** Mutations through a member chain: `x.a = 1`, `x.a++`, `delete x.a`. */
+const memberMutations: Record<string, (node: WorkflowNode) => WorkflowNode | undefined> = {
+  AssignmentExpression: (node) => childNode(node, 'left'),
+  UpdateExpression: (node) => childNode(node, 'argument'),
+  UnaryExpression: (node) =>
+    node['operator'] === 'delete' ? childNode(node, 'argument') : undefined,
+};
+
+function isObjectMutator(callee: WorkflowNode | undefined): boolean {
+  return (
+    callee?.type === 'MemberExpression' &&
+    identifierName(childNode(callee, 'object')) === 'Object' &&
+    objectMutators.has(identifierName(childNode(callee, 'property')) ?? '')
+  );
+}
+
+/**
+ * Names a call may mutate: `Object.assign(target, ...)` and friends mutate their
+ * first argument, and any function other than `safeCallees` may mutate whatever
+ * object it is handed.
+ */
+function callMutationTargets(node: WorkflowNode, safeCallees: ReadonlySet<string>): string[] {
+  const callee = childNode(node, 'callee');
+  if (safeCallees.has(identifierName(callee) ?? '')) return [];
+  const passed = childNodes(node, 'arguments').map((argument) =>
+    argument?.type === 'Identifier' ? (identifierName(argument) ?? '') : '',
+  );
+  return isObjectMutator(callee) ? passed.slice(0, 1) : passed;
+}
+
+/** The names a node may mutate through, if it is a mutation at all. */
+function mutationTargets(node: WorkflowNode, safeCallees: ReadonlySet<string>): string[] {
+  if (node.type === 'CallExpression') return callMutationTargets(node, safeCallees);
+  const target = memberMutations[node.type]?.(node);
+  return target ? [memberRoot(target) ?? ''] : [];
+}
+
+/**
+ * Names whose object the script may change after binding it: a property
+ * assignment, update, or `delete` through it (at any depth), an `Object.assign`
+ * style call on it, or handing it to a function other than `safeCallees`. A
+ * `const` freezes the binding, not the object, so these can't be read statically.
+ */
+export function possiblyMutatedNames(
+  program: WorkflowNode,
+  safeCallees: ReadonlySet<string>,
+): Set<string> {
+  const mutated = new Set<string>();
+  const walk = (node: WorkflowNode): void => {
+    for (const name of mutationTargets(node, safeCallees)) if (name !== '') mutated.add(name);
+    forEachChild(node, walk);
+  };
+  walk(program);
+  return mutated;
 }

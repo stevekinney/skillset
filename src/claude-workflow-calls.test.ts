@@ -200,3 +200,66 @@ describe('shadowing through every binding pattern', () => {
     expect(result.agents).toEqual([]);
   });
 });
+
+describe('constants the call site cannot rely on', () => {
+  it('leaves a constant unresolved where a local binding shadows it', () => {
+    const result = extractClaudeWorkflowCalls(
+      "const PHASE = 'Scan'\nfunction run(PHASE) { phase(PHASE) }\nphase(PHASE)",
+    );
+    if (!result.ok) throw new Error('expected the script to parse');
+    expect(result.phases.map((phase) => phase.title)).toEqual([undefined, 'Scan']);
+  });
+
+  it('leaves an object constant unresolved when the script may mutate it', () => {
+    const result = extractClaudeWorkflowCalls(
+      [
+        "const MUTATED = { effort: 'bogus' }",
+        "MUTATED.effort = 'low'",
+        "const ESCAPED = { effort: 'bogus' }",
+        'prepare(ESCAPED)',
+        "const STABLE = { effort: 'low' }",
+        "agent('a', MUTATED)",
+        "agent('b', ESCAPED)",
+        "agent('c', STABLE)",
+      ].join('\n'),
+    );
+    if (!result.ok) throw new Error('expected the script to parse');
+    expect(result.agents.map((agent) => agent.options)).toEqual([{ effort: 'low' }]);
+    expect(result.agentsWithoutLiteralOptions).toBe(2);
+  });
+
+  it('reads constructor and prototype as ordinary option keys', () => {
+    const result = extractClaudeWorkflowCalls("agent('x', { effort: 'bogus', constructor: 1 })");
+    if (!result.ok) throw new Error('expected the script to parse');
+    expect(result.agents.map((agent) => agent.options)).toEqual([
+      { effort: 'bogus', constructor: 1 },
+    ]);
+  });
+});
+
+describe('every way a script can change an object constant', () => {
+  it('treats updates, deletes, nested writes, Object.assign, and hand-offs as mutations', () => {
+    const result = extractClaudeWorkflowCalls(
+      [
+        'const UPDATED = { stallMs: 1 }',
+        'UPDATED.stallMs++',
+        "const DELETED = { effort: 'low' }",
+        'delete DELETED.effort',
+        "const NESTED = { schema: { type: 'object', properties: {} } }",
+        "NESTED.schema.properties.id = { type: 'string' }",
+        "const ASSIGNED = { effort: 'low' }",
+        "Object.assign(ASSIGNED, { effort: 'high' })",
+        // Handed to another function, so conservatively unknown, even a harmless one.
+        "const HANDED_OFF = { effort: 'low' }",
+        'Object.freeze(HANDED_OFF)',
+        "agent('a', UPDATED)",
+        "agent('b', DELETED)",
+        "agent('c', NESTED)",
+        "agent('d', ASSIGNED)",
+        "agent('e', HANDED_OFF)",
+      ].join('\n'),
+    );
+    if (!result.ok) throw new Error('expected the script to parse');
+    expect(result.agentsWithoutLiteralOptions).toBe(5);
+  });
+});

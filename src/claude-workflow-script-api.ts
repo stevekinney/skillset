@@ -106,6 +106,12 @@ export interface ClaudeWorkflowAgent {
     prompt: string,
     options?: ClaudeWorkflowAgentCallOptions & { schema?: undefined },
   ): Promise<string | null>;
+  // A schema chosen at runtime (`cond ? schema : undefined`, or a broadly typed
+  // reusable options object): either result is possible.
+  (
+    prompt: string,
+    options?: ClaudeWorkflowAgentCallOptions & { schema?: ClaudeWorkflowSchemaObject | undefined },
+  ): Promise<string | Record<string, unknown> | null>;
 }
 
 /** One `pipeline()` stage. `previous` is the prior stage's result (the item, for the first stage). */

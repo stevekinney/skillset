@@ -3,14 +3,13 @@ import {
   childNodes,
   evaluateWorkflowLiteral,
   identifierName,
-  literalPropertyName,
   nodeLocation,
   parseWorkflowProgram,
   topLevelConstants,
   type WorkflowIdentifierResolver,
   type WorkflowNode,
 } from './claude-workflow-ast.js';
-import { walkWorkflowGlobalCalls } from './claude-workflow-scope.js';
+import { possiblyMutatedNames, walkWorkflowGlobalCalls } from './claude-workflow-scope.js';
 
 /**
  * Finds the calls a workflow script makes to its globals, and evaluates each
@@ -57,7 +56,7 @@ function evaluateOptions(node: WorkflowNode, resolve: WorkflowIdentifierResolver
   let unresolvedProperties = 0;
   for (const property of childNodes(node, 'properties')) {
     const value = property ? childNode(property, 'value') : undefined;
-    const name = property?.type === 'Property' ? propertyNameOrUndefined(property) : undefined;
+    const name = property?.type === 'Property' ? optionPropertyName(property) : undefined;
     if (name === undefined || !value) {
       // A spread or computed key can overwrite any key set before it, so those
       // values are no longer known; only later properties are final.
@@ -93,13 +92,15 @@ function stringOrUndefined(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
-/** A property's literal name (identifier or quoted), or `undefined` for a computed one. */
-function propertyNameOrUndefined(property: WorkflowNode): string | undefined {
-  try {
-    return literalPropertyName(property);
-  } catch {
-    return undefined;
-  }
+/**
+ * An option property's literal name (identifier or quoted), or `undefined` for a
+ * computed key, method, or accessor. Unlike `meta`, an options object has no
+ * reserved names: `constructor` is an ordinary key there.
+ */
+function optionPropertyName(property: WorkflowNode): string | undefined {
+  if (property['computed'] || property['method'] || property['kind'] !== 'init') return undefined;
+  const key = childNode(property, 'key');
+  return key?.type === 'Literal' ? String(key['value']) : identifierName(key);
 }
 
 function recordAgent(
@@ -111,7 +112,7 @@ function recordAgent(
   const evaluated = evaluateOptions(options, resolve);
   found.agents.push({ ...nodeLocation(call), ...evaluated });
   const phaseProperty = childNodes(options, 'properties').find(
-    (property) => property?.type === 'Property' && propertyNameOrUndefined(property) === 'phase',
+    (property) => property?.type === 'Property' && optionPropertyName(property) === 'phase',
   );
   if (phaseProperty)
     found.phases.push({
@@ -162,7 +163,7 @@ export function extractClaudeWorkflowCalls(source: string): ClaudeWorkflowCalls 
   }
 
   const constants = topLevelConstants(parsed.program);
-  const resolve: WorkflowIdentifierResolver = (name) => constants.get(name);
+  const mutated = possiblyMutatedNames(parsed.program, workflowCallGlobals);
   const found: Found = {
     ok: true,
     agents: [],
@@ -171,9 +172,13 @@ export function extractClaudeWorkflowCalls(source: string): ClaudeWorkflowCalls 
     workflowReferencesUnresolved: 0,
     phases: [],
   };
-  walkWorkflowGlobalCalls(parsed.program, workflowCallGlobals, (call) =>
-    recordCall(found, call, resolve),
-  );
+  walkWorkflowGlobalCalls(parsed.program, workflowCallGlobals, (call, _name, localNames) => {
+    // A top-level constant resolves only where no local binding hides it and the
+    // script never changes the object it holds.
+    const resolve: WorkflowIdentifierResolver = (name) =>
+      localNames.has(name) || mutated.has(name) ? undefined : constants.get(name);
+    recordCall(found, call, resolve);
+  });
   return found;
 }
 

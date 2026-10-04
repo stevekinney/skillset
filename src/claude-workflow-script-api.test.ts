@@ -79,6 +79,10 @@ async function typedScript() {
   assertType<Equal<typeof text, string | null>>();
   const noOptions = await agent('Hello');
   assertType<Equal<typeof noOptions, string | null>>();
+  // A schema chosen at runtime: either result is possible.
+  const maybeSchema = noOptions === null ? objectSchema : undefined;
+  const either = await agent('Maybe', { schema: maybeSchema });
+  assertType<Equal<typeof either, string | Record<string, unknown> | null>>();
 
   const audits = await pipeline(
     ['a.ts'],
