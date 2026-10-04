@@ -9,6 +9,12 @@ describe('claudeAgentMcpServerSchema', () => {
     expect(claudeAgentMcpServerSchema.parse(inline) as unknown).toEqual(inline);
   });
 
+  it('requires exactly one server name in an inline mapping', () => {
+    expect(claudeAgentMcpServerSchema.safeParse({}).success).toBe(false);
+    const two = { a: { command: 'x' }, b: { command: 'y' } };
+    expect(claudeAgentMcpServerSchema.safeParse(two).success).toBe(false);
+  });
+
   it('rejects what Claude Code would drop', () => {
     expect(claudeAgentMcpServerSchema.safeParse({ a: { type: 'http' } }).success).toBe(false);
     expect(claudeAgentMcpServerSchema.safeParse(5).success).toBe(false);

@@ -110,6 +110,9 @@ export const claudeMcpOverrideSchema = z
   })
   .partial();
 
+/** The `claude:` override block of an mcp-servers.yaml server. */
+export type ClaudeMcpOverride = z.infer<typeof claudeMcpOverrideSchema>;
+
 function entryType(entry: Record<string, unknown>): string | undefined {
   return typeof entry['type'] === 'string' ? entry['type'] : undefined;
 }
@@ -246,7 +249,10 @@ function isBlank(value: string | undefined): boolean {
   return value !== undefined && value.trim().length === 0;
 }
 
-type CodexSection = z.infer<typeof codexMcpFieldsSchema>;
+/** The fields a Codex `[mcp_servers.<name>]` table may hold, before transport rules apply. */
+export type CodexMcpFields = z.infer<typeof codexMcpFieldsSchema>;
+
+type CodexSection = CodexMcpFields;
 type Reject = (field: string, message: string) => void;
 
 function isPresent(section: object, field: string): boolean {

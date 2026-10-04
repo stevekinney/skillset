@@ -35,7 +35,11 @@ const claudeAiProxySchema = z.looseObject({
  */
 export const claudeAgentMcpServerSchema = z.union([
   z.string(),
-  z.record(z.string(), claudeMcpServerSchema),
+  z
+    .record(z.string(), claudeMcpServerSchema)
+    .refine((mapping) => Object.keys(mapping).length === 1, {
+      message: 'an inline server is a mapping with exactly one server name',
+    }),
 ]);
 
 /** A subagent `mcpServers` item Claude Code keeps. */
