@@ -38,7 +38,7 @@ HTTP route handlers — same guard/analyze/dispatch shape, different transport.
    `removeSource` or direct file edits. Union frontmatter means the UI edits
    one document per item, never two dialects.
 
-2. **The ledger** (`~/.config/skillset/state.json`, version 2) — machine
+2. **The ledger** (version 2; at `resolveTargets(...).ledgerFile`: `$XDG_CONFIG_HOME/skillset/state.json` when `XDG_CONFIG_HOME` is absolute, `%APPDATA%\skillset\state.json` on Windows, else `~/.config/skillset/state.json`. Until a sync writes it there, the ledger at `legacyLedgerFile`, the old `~/.config` path, is the current one; `readLedger` falls back to it) — machine
    state: for every managed output, its kind, name, scope, target, a
    `sha256:` hash of what was last written (per emitted file for directory
    kinds), the exact managed entry for config-embedded kinds, and a
