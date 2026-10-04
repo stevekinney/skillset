@@ -8,6 +8,8 @@ import {
   codexMcpProblems,
   codexUnknownFieldHint,
   unknownClaudeMcpFields,
+  type ClaudeMcpOverride,
+  type CodexMcpFields,
   unknownCodexMcpFields,
 } from './mcp-schema.js';
 
@@ -276,5 +278,14 @@ describe('nested unknown fields', () => {
       unknownClaudeMcpFields({ type: 'http', url: 'x', oauth: { clientId: 'a', clientid: 'b' } }),
     ).toEqual(['oauth.clientid']);
     expect(unknownClaudeMcpFields({ type: 'http', url: 'x', oauth: 'x' })).toEqual([]);
+  });
+});
+
+describe('override types', () => {
+  it('describe the per-tool override blocks', () => {
+    const claude: ClaudeMcpOverride = { headersHelper: 'print-headers' };
+    const codex: CodexMcpFields = { startup_timeout_sec: 20 };
+    expect(claudeMcpOverrideSchema.parse(claude)).toEqual(claude);
+    expect(codexMcpFieldsSchema.parse(codex)).toEqual(codex);
   });
 });

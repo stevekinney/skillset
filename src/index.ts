@@ -157,7 +157,9 @@ export {
   claudeMcpServerSchema,
   codexMcpFieldsSchema,
   codexMcpServerSchema,
+  type ClaudeMcpOverride,
   type ClaudeMcpServer,
+  type CodexMcpFields,
   type CodexMcpServer,
 } from './mcp-schema.js';
 export { createMcpServer, createStdioTransport, runMcpServer } from './mcp-server.js';
