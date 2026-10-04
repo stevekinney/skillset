@@ -32,7 +32,12 @@ import {
 import { claudeHookSettingsSchema, codexHookSettingsSchema } from './hook-schema.js';
 import { hooksSourceSchema } from './hooks-config.js';
 import { mcpSourceSchema } from './mcp-config.js';
-import { claudeMcpServerSchema, codexMcpServerSchema } from './mcp-schema.js';
+import {
+  claudeMcpOverrideSchema,
+  claudeMcpServerSchema,
+  codexMcpFieldsSchema,
+  codexMcpServerSchema,
+} from './mcp-schema.js';
 
 /**
  * A type guard backed by a schema. It narrows to the schema's *input* type:
@@ -81,6 +86,12 @@ export const isClaudeMcpServer = schemaGuard(claudeMcpServerSchema);
 
 /** Whether a value is a subagent `mcpServers` item Claude Code keeps. */
 export const isClaudeAgentMcpServer = schemaGuard(claudeAgentMcpServerSchema);
+
+/** Whether a value is a valid `claude:` override block of an mcp-servers.yaml server. */
+export const isClaudeMcpOverride = schemaGuard(claudeMcpOverrideSchema);
+
+/** Whether a value holds valid Codex MCP server fields (the `codex:` override block). */
+export const isCodexMcpFields = schemaGuard(codexMcpFieldsSchema);
 
 /** Whether a value is a valid Codex `[mcp_servers.<name>]` table. */
 export const isCodexMcpServer = schemaGuard(codexMcpServerSchema);
