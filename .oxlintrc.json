@@ -69,6 +69,12 @@
       "rules": {
         "no-console": "off"
       }
+    },
+    {
+      "files": ["src/index.ts"],
+      "rules": {
+        "max-lines": "off"
+      }
     }
   ]
 }
