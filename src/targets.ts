@@ -30,6 +30,12 @@ export type Targets = {
   codex: ToolTargets;
   /** The sync ledger (always user-level, shared across scopes). */
   ledgerFile: string;
+  /**
+   * Where the ledger lived before it followed `XDG_CONFIG_HOME`/`%APPDATA%`:
+   * `~/.config/skillset/state.json`. Read until the new ledger exists, and
+   * removed once it is written. Equal to `ledgerFile` when nothing moved.
+   */
+  legacyLedgerFile: string;
 };
 
 /**
@@ -41,7 +47,28 @@ export type ConfigDirectoryOverrides = {
   claudeConfigDirectory?: string | undefined;
   /** `CODEX_HOME`: replaces `~/.codex`. User skills stay in `~/.agents/skills`. */
   codexHome?: string | undefined;
+  /** `XDG_CONFIG_HOME`: where the ledger lives (`<it>/skillset`), when absolute. */
+  xdgConfigHome?: string | undefined;
+  /** `APPDATA`: where the ledger lives on Windows (`<it>\\skillset`). */
+  appData?: string | undefined;
+  /** The OS to resolve for; defaults to the running one. */
+  platform?: string | undefined;
 };
+
+/**
+ * The ledger's directory: `$XDG_CONFIG_HOME/skillset` when that is set to an
+ * absolute path (the XDG rule; a relative value is ignored), `%APPDATA%\\skillset`
+ * on Windows, otherwise `~/.config/skillset`.
+ */
+function ledgerDirectory(home: string, overrides: ConfigDirectoryOverrides): string {
+  if (overrides.xdgConfigHome && isAbsolute(overrides.xdgConfigHome)) {
+    return join(overrides.xdgConfigHome, 'skillset');
+  }
+  if ((overrides.platform ?? process.platform) === 'win32' && overrides.appData) {
+    return join(overrides.appData, 'skillset');
+  }
+  return join(home, '.config', 'skillset');
+}
 
 function overrideDirectory(
   value: string | undefined,
@@ -171,6 +198,7 @@ export function resolveTargets(
   return {
     scope,
     ...tools,
-    ledgerFile: join(homeDirectory, '.config', 'skillset', 'state.json'),
+    ledgerFile: join(ledgerDirectory(homeDirectory, overrides), 'state.json'),
+    legacyLedgerFile: join(homeDirectory, '.config', 'skillset', 'state.json'),
   };
 }

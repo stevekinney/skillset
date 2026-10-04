@@ -91,7 +91,7 @@ bun run package:check    # Run publint + @arethetypeswrong/cli on packed tarball
 
 1. **Environment-First Configuration**: All configuration resolves through `@lostgradient/environmentalist` with a Zod schema in `src/environment.ts` (env vars, dotenv, `skillset.config.*`). The `environment` object is the single source of truth.
 
-2. **Marker + Ledger Ownership**: Sync only overwrites or prunes outputs it can prove it wrote — file outputs carry `GENERATED_MARKER`, config entries live in the ledger (`~/.config/skillset/state.json`) with content hashes. Hand-installed files are skipped as unmanaged; hand-edited managed outputs are skipped as drifted; both need `--force`.
+2. **Marker + Ledger Ownership**: Sync only overwrites or prunes outputs it can prove it wrote — file outputs carry `GENERATED_MARKER`, config entries live in the ledger (`$XDG_CONFIG_HOME/skillset/state.json`, `%APPDATA%\skillset\state.json` on Windows, else `~/.config/skillset/state.json`; an old `~/.config` ledger is read until the next write retires it) with content hashes. Hand-installed files are skipped as unmanaged; hand-edited managed outputs are skipped as drifted; both need `--force`.
 
 3. **Runtime-Neutral Published Code**: `src/` must not use Bun-only runtime APIs (`Bun.file`, `Bun.env`, `Bun.serve`, etc.). Those APIs are fine in `scripts/` and test files, but must not appear in published library output.
 
@@ -160,6 +160,7 @@ There is no shared `src/types.ts` in this template. Add shared or domain-specifi
 
 - Tests use Bun's built-in test runner with `describe`, `it`, `expect`.
 - Test files are colocated with sources using the `.test.ts` suffix.
+- `test/cli-fixture.ts` holds the CLI test fixture (temporary source root and home, `addSkill`/`addAgent`, a stat-based `exists`); register `removeFixtures` in each file's `afterEach`.
 - `test/setup.ts` is preloaded by `bunfig.toml` — it resets mocks and system time in `afterEach`. All tests get this automatically.
 - Oxlint rules are relaxed for test files. You can use `any`, non-null assertions, and other patterns normally flagged.
 - A separate `tsconfig.test.json` provides relaxed TypeScript settings for tests (checked by `bun run typecheck:test`).

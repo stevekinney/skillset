@@ -1,5 +1,15 @@
 import { afterEach, describe, expect, it } from 'bun:test';
-import { chmod, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -187,5 +197,80 @@ describe('a failed write in a queue of writes', () => {
     expect(first.status).toBe('rejected');
     expect(second.status).toBe('fulfilled');
     expect(JSON.parse(await readFile(path, 'utf8'))).toEqual(valid);
+  });
+});
+
+describe('moving the ledger to a new location', () => {
+  const item = {
+    kind: 'skill' as const,
+    name: 'demo',
+    scope: 'user' as const,
+    target: 'claude' as const,
+    hash: 'sha256:x',
+    syncedAt: 't',
+  };
+  const v1Paths = { claudeMcpConfig: '/c', codexMcpConfig: '/x' };
+
+  it('reads the old ledger until the new one exists, and prefers the new one', async () => {
+    const path = await makePath();
+    const legacy = join(dirname(path), 'legacy.json');
+    await writeFile(legacy, JSON.stringify({ version: 2, items: { demo: item } }));
+
+    const fromLegacy = await readLedger(path, v1Paths, legacy);
+    expect(fromLegacy.items).toEqual({ demo: item });
+    await writeFile(path, JSON.stringify({ version: 2, items: {} }));
+    const fromCurrent = await readLedger(path, v1Paths, legacy);
+    expect(fromCurrent.items).toEqual({});
+  });
+
+  it('retires the old ledger only after writing the new one', async () => {
+    const path = await makePath();
+    const legacy = join(dirname(path), 'legacy.json');
+    await writeFile(legacy, JSON.stringify({ version: 2, items: { demo: item } }));
+    const ledger = await readLedger(path, v1Paths, legacy);
+
+    await writeLedger(path, ledger, legacy);
+    const entries = await readdir(dirname(path));
+    expect(entries).toEqual(['state.json']);
+    expect(JSON.parse(await readFile(path, 'utf8')).items).toEqual({ demo: item });
+  });
+});
+
+describe('when the old and new ledger paths are the same file', () => {
+  it('keeps the ledger instead of deleting it through the other name', async () => {
+    const path = await makePath();
+    // The old location reaches the new file through a symlinked directory.
+    const linkedDirectory = join(dirname(path), 'linked');
+    await symlink(
+      dirname(path),
+      linkedDirectory,
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
+    const legacy = join(linkedDirectory, 'state.json');
+
+    await writeLedger(path, { version: 2, items: {} }, legacy);
+    expect(JSON.parse(await readFile(path, 'utf8'))).toEqual({ version: 2, items: {} });
+  });
+});
+
+describe('a ledger with no old location to retire', () => {
+  it('writes normally when the old path does not exist', async () => {
+    const path = await makePath();
+    const legacy = join(dirname(path), 'never-existed.json');
+    await writeLedger(path, { version: 2, items: {} }, legacy);
+    const entries = await readdir(dirname(path));
+    expect(entries).toEqual(['state.json']);
+  });
+});
+
+describe('a first run with no ledger anywhere', () => {
+  it('starts empty when neither the new nor the old ledger exists', async () => {
+    const path = await makePath();
+    const ledger = await readLedger(
+      path,
+      { claudeMcpConfig: '/c', codexMcpConfig: '/x' },
+      join(dirname(path), 'old.json'),
+    );
+    expect(ledger).toEqual({ version: 2, items: {} });
   });
 });

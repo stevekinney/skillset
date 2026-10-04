@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 import type { Target } from './frontmatter.js';
@@ -111,8 +111,18 @@ function isLedger(value: unknown): value is Ledger {
  * Read the ledger, migrating a milestone-2 MCP state file (v1) in place and
  * starting fresh on anything unreadable.
  */
-export async function readLedger(path: string, migration: LedgerMigration): Promise<Ledger> {
-  const raw = await readFile(path, 'utf8').catch(() => undefined);
+export async function readLedger(
+  path: string,
+  migration: LedgerMigration,
+  legacyPath?: string,
+): Promise<Ledger> {
+  // Until the ledger has been written at its current location, the one at the
+  // previous location is the record of what skillset owns.
+  const current = await readFile(path, 'utf8').catch(() => undefined);
+  const raw =
+    current === undefined && legacyPath !== undefined && legacyPath !== path
+      ? await readFile(legacyPath, 'utf8').catch(() => undefined)
+      : current;
   if (raw === undefined) return { version: 2, items: {} };
 
   let parsed: unknown;
@@ -136,6 +146,13 @@ export async function readLedger(path: string, migration: LedgerMigration): Prom
  * world-readable inode until a later `chmod`, and a crash in between would leave
  * them there.
  */
+/** Whether two paths name the same file on disk, or the second doesn't exist. */
+async function sameFile(path: string, other: string): Promise<boolean> {
+  if (other === path) return true;
+  const [current, previous] = await Promise.all([stat(path), stat(other).catch(() => undefined)]);
+  return previous === undefined || (previous.dev === current.dev && previous.ino === current.ino);
+}
+
 /**
  * Writes in progress, by path. Overlapping writes to one ledger run one after
  * another: on Windows, renaming onto a file another in-flight rename holds open
@@ -143,7 +160,11 @@ export async function readLedger(path: string, migration: LedgerMigration): Prom
  */
 const pendingWrites = new Map<string, Promise<void>>();
 
-export async function writeLedger(path: string, ledger: Ledger): Promise<void> {
+export async function writeLedger(
+  path: string,
+  ledger: Ledger,
+  legacyPath?: string,
+): Promise<void> {
   const previous = pendingWrites.get(path) ?? Promise.resolve();
   const write = previous.then(
     () => replaceLedger(path, ledger),
@@ -154,6 +175,12 @@ export async function writeLedger(path: string, ledger: Ledger): Promise<void> {
     await write;
   } finally {
     if (pendingWrites.get(path) === write) pendingWrites.delete(path);
+  }
+  // Only after the ledger is safely at its new location is the old one retired,
+  // and never when both names reach the same file (a symlinked XDG_CONFIG_HOME,
+  // say): removing it would delete the ledger just written.
+  if (legacyPath !== undefined && !(await sameFile(path, legacyPath))) {
+    await rm(legacyPath, { force: true });
   }
 }
 
