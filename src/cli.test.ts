@@ -294,13 +294,6 @@ describe('mcp command', () => {
   });
 });
 
-// stat, not Bun.file().exists(), which is false for any directory.
-const directoryExists = (path: string) =>
-  stat(path).then(
-    () => true,
-    () => false,
-  );
-
 describe('config directory overrides', () => {
   it('syncs into CLAUDE_CONFIG_DIR and CODEX_HOME instead of the defaults', async () => {
     const fixture = await makeFixture();
@@ -321,8 +314,21 @@ describe('config directory overrides', () => {
     expect(
       await Bun.file(join(fixture.home, '.agents', 'skills', 'demo', 'SKILL.md')).exists(),
     ).toBe(true);
-    expect(await directoryExists(join(fixture.home, '.claude'))).toBe(false);
-    expect(await directoryExists(join(fixture.home, '.codex'))).toBe(false);
-    expect(await directoryExists(claudeHome)).toBe(true);
+    expect(await exists(join(fixture.home, '.claude'))).toBe(false);
+    expect(await exists(join(fixture.home, '.codex'))).toBe(false);
+    expect(await exists(claudeHome)).toBe(true);
+  });
+});
+
+describe('relative CLAUDE_CONFIG_DIR', () => {
+  it('fails with a clear message instead of writing somewhere Claude Code never reads', async () => {
+    const fixture = await makeFixture();
+    await addSkill(fixture, 'demo', validSkill);
+    const code = await runCli(['sync'], {
+      ...fixture.dependencies,
+      env: { NODE_ENV: 'test', CLAUDE_CONFIG_DIR: 'relative-config' },
+    });
+    expect(code).toBe(1);
+    expect(fixture.lines.join('\n')).toContain('CLAUDE_CONFIG_DIR must be an absolute path');
   });
 });

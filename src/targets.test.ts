@@ -87,6 +87,15 @@ describe('config directory overrides', () => {
     expect(relative.codex.agents).toBe(join(resolve('/repo', 'codex-home'), 'agents'));
   });
 
+  it('rejects a relative CLAUDE_CONFIG_DIR, as Claude Code does, at user scope only', () => {
+    expect(() =>
+      resolveTargets('user', '/home/user', '/repo', { claudeConfigDirectory: 'claude-config' }),
+    ).toThrow('CLAUDE_CONFIG_DIR must be an absolute path');
+    expect(() =>
+      resolveTargets('project', '/home/user', '/repo', { claudeConfigDirectory: 'claude-config' }),
+    ).not.toThrow();
+  });
+
   it('leaves project scope and the ledger alone', () => {
     const overrides = { claudeConfigDirectory: '/c', codexHome: '/x' };
     expect(resolveTargets('project', '/home/user', '/repo', overrides)).toEqual(

@@ -173,7 +173,13 @@ export {
   type SyncAction,
   type SyncOptions,
 } from './sync.js';
-export { resolveTargets, type Scope, type Targets, type ToolTargets } from './targets.js';
+export {
+  resolveTargets,
+  type ConfigDirectoryOverrides,
+  type Scope,
+  type Targets,
+  type ToolTargets,
+} from './targets.js';
 export { renderConditionals, type RenderResult, type TemplateError } from './template.js';
 export { spliceTomlScalar, spliceTomlSection } from './toml-splice.js';
 export {

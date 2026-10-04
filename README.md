@@ -13,7 +13,7 @@ Author everything once under a single source root; `skillset` emits per-tool out
 | `./hooks.yaml`             | `~/.claude/settings.json`        | `~/.codex/hooks.json`                               | `.claude/settings.json` | `.codex/hooks.json`  |
 | `./defaults.yaml`          | `~/.claude/settings.json`        | `~/.codex/config.toml`                              | `.claude/settings.json` | `.codex/config.toml` |
 
-At user scope, skillset follows the same variables the tools do for moving their configuration. With `CLAUDE_CONFIG_DIR` set, every `~/.claude/` path above moves into that directory, and so does `.claude.json`. With `CODEX_HOME` set, every `~/.codex/` path moves there, while user skills stay in `~/.agents/skills/`, as Codex reads them. Both are read only from the environment, never from a `.env` or `skillset.config.*` file. Project scope ignores them.
+At user scope, skillset follows the same variables the tools do for moving their configuration. With `CLAUDE_CONFIG_DIR` set, every `~/.claude/` path above moves into that directory, and so does `.claude.json`. With `CODEX_HOME` set, every `~/.codex/` path moves there, while user skills stay in `~/.agents/skills/`, as Codex reads them. Both are read only from the environment, never from a `.env` or `skillset.config.*` file. A relative `CLAUDE_CONFIG_DIR` is an error, since Claude Code rejects one, while a relative `CODEX_HOME` resolves against the working directory. Project scope ignores both.
 
 The source root is the current directory, or `$SKILLSET_DIRECTORY` when set (configuration resolves through [@lostgradient/environmentalist](https://github.com/stevekinney/environmentalist), so `.env` files and `skillset.config.*` files work too). Any kind may be absent.
 

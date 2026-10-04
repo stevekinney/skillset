@@ -1,5 +1,5 @@
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { isAbsolute, join, resolve } from 'node:path';
 
 import type { Target } from './frontmatter.js';
 
@@ -54,6 +54,14 @@ function userTargets(
   overrides: ConfigDirectoryOverrides,
   workingDirectory: string,
 ): Record<Target, ToolTargets> {
+  // Claude Code refuses a relative CLAUDE_CONFIG_DIR ("is not an absolute path"),
+  // so resolving it here would write files Claude never reads. CODEX_HOME is
+  // resolved like Codex resolves it.
+  if (overrides.claudeConfigDirectory && !isAbsolute(overrides.claudeConfigDirectory)) {
+    throw new Error(
+      `CLAUDE_CONFIG_DIR must be an absolute path (got \`${overrides.claudeConfigDirectory}\`); Claude Code rejects a relative one`,
+    );
+  }
   const claudeOverride = overrideDirectory(overrides.claudeConfigDirectory, workingDirectory);
   const claudeHome = claudeOverride ?? join(home, '.claude');
   const codexHome =
