@@ -1,9 +1,9 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 import { parse as parseToml } from 'smol-toml';
 
-import { retryOnWindowsLock } from './file-retry.js';
+import { writeUnlessChanged } from './file-retry.js';
 import { withoutByteOrderMark } from './byte-order-mark.js';
 import {
   backupOnce,
@@ -156,7 +156,7 @@ async function applyCodexDefaults(
   }
 
   await mkdir(dirname(file), { recursive: true });
-  await retryOnWindowsLock(() => writeFile(file, contents, 'utf8'));
+  await writeUnlessChanged(file, contents);
 }
 
 /**

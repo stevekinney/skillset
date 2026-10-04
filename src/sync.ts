@@ -146,8 +146,21 @@ export function agentFileName(name: string, target: Target): string {
   return target === 'claude' ? `${name}.md` : `${name}.toml`;
 }
 
+/**
+ * Whether a file exists. Only a missing file counts as absent: a file that can't
+ * be read right now (locked, or unreadable) must not be planned as a fresh write
+ * over whatever it holds, so that error surfaces instead.
+ */
 async function fileExists(path: string): Promise<boolean> {
-  return (await readFile(path, 'utf8').catch(() => undefined)) !== undefined;
+  try {
+    await readFile(path, 'utf8');
+    return true;
+  } catch (cause) {
+    const code =
+      typeof cause === 'object' && cause !== null && 'code' in cause ? cause.code : undefined;
+    if (code === 'ENOENT' || code === 'ENOTDIR') return false;
+    throw cause;
+  }
 }
 
 async function planSkillActions(

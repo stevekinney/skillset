@@ -1,3 +1,5 @@
+import { readFile, writeFile } from 'node:fs/promises';
+
 /**
  * Errors Windows raises while another process briefly holds a file open: a
  * virus scanner or search indexer inspecting a file just written, or a tool
@@ -53,4 +55,45 @@ export async function retryOnWindowsLock<Result>(
   }
 
   return operation();
+}
+
+/** The file changed while skillset waited for another program to release it. */
+export class FileChangedError extends Error {
+  constructor(path: string) {
+    super(
+      `${path} changed while another program held it, so skillset did not overwrite it; run the command again`,
+    );
+    this.name = 'FileChangedError';
+  }
+}
+
+export type WriteUnlessChangedOptions = RetryOptions & {
+  /** How to write; injectable so tests can simulate a lock. */
+  write?: (path: string, contents: string) => Promise<void>;
+};
+
+const readIfPresent = (path: string) => readFile(path, 'utf8').catch(() => undefined);
+
+/**
+ * Write a file another program also writes (a tool's shared config), retrying a
+ * Windows lock like {@link retryOnWindowsLock}, but only while the file is
+ * unchanged. A lock often means the other program is saving it; retrying blindly
+ * would overwrite what it just saved, so a changed file fails instead, as the
+ * locked write would have before.
+ */
+export async function writeUnlessChanged(
+  path: string,
+  contents: string,
+  options: WriteUnlessChangedOptions = {},
+): Promise<void> {
+  const write =
+    options.write ?? ((target: string, text: string) => writeFile(target, text, 'utf8'));
+  const before = await readIfPresent(path);
+  let retrying = false;
+
+  await retryOnWindowsLock(async () => {
+    if (retrying && (await readIfPresent(path)) !== before) throw new FileChangedError(path);
+    retrying = true;
+    await write(path, contents);
+  }, options);
 }

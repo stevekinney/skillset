@@ -81,7 +81,7 @@ bun run package:check    # Run publint + @arethetypeswrong/cli on packed tarball
 - `mcp-apply.ts` / `hooks-apply.ts` / `defaults-apply.ts` — surgical application to the shared config files, entry-level ledger ownership, backups.
 - `claude-hook-shared.ts` / `claude-hook-input-schemas.ts` / `claude-hook-output-schemas.ts` / `codex-hook-payloads.ts` — public Zod schemas for every hook event's stdin input and stdout output (inputs loose, Codex outputs strict), with `parse*HookInput`/`parse*HookOutput` helpers; exported from `index.ts` for hook authors.
 - `byte-order-mark.ts` — `withoutByteOrderMark`, which every reader of a user-editable file uses (JSON configs, frontmatter, `doctor --targets`).
-- `file-retry.ts` — `retryOnWindowsLock`: retries a write, rename, copy, or removal on Windows when another process briefly holds the file (`EPERM`/`EBUSY`/`EACCES`, about 1.5s of backoff); fails at once elsewhere. Wrap destination-side file operations in it.
+- `file-retry.ts` — `retryOnWindowsLock`: retries a write, rename, copy, or removal on Windows when another process briefly holds the file (`EPERM`/`EBUSY`/`EACCES`, about 1.5s of backoff); fails at once elsewhere. Wrap destination-side file operations in it; for a file another program also writes (a tool's shared config), use `writeUnlessChanged`, which only retries while the file is unchanged.
 - `config-files.ts` — shared JSON config read/write + backup helpers and the `EmbeddedAction` type.
 - `toml-splice.ts` — comment-preserving `[section]` and top-level-scalar splicing for `config.toml`.
 - `import.ts` — reverse-compiles installed skills/agents/instructions into sources.
@@ -160,6 +160,7 @@ There is no shared `src/types.ts` in this template. Add shared or domain-specifi
 
 - Tests use Bun's built-in test runner with `describe`, `it`, `expect`.
 - Test files are colocated with sources using the `.test.ts` suffix.
+- `test/sync-fixture.ts` holds the sync test fixture (temporary targets and sources, `temporaryDirectory`); register `removeSyncFixtures` in each file's `afterEach`.
 - `test/cli-fixture.ts` holds the CLI test fixture (temporary source root and home, `addSkill`/`addAgent`, a stat-based `exists`); register `removeFixtures` in each file's `afterEach`.
 - `test/setup.ts` is preloaded by `bunfig.toml` — it resets mocks and system time in `afterEach`. All tests get this automatically.
 - Oxlint rules are relaxed for test files. You can use `any`, non-null assertions, and other patterns normally flagged.
