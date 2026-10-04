@@ -15,7 +15,15 @@ import {
   isClaudeSessionRecord,
   isClaudeSessionRecordFor,
   isClaudeSettingsEffort,
+  isClaudeWorkflowAgentOptions,
+  isClaudeWorkflowBudget,
   isClaudeWorkflowJournalRecord,
+  isClaudeWorkflowMeta,
+  isClaudeWorkflowOutputSchema,
+  isClaudeWorkflowReference,
+  isClaudeWorkflowRunRecord,
+  isClaudeWorkflowToolInput,
+  isClaudeWorkflowToolOutput,
   isCodexHookInput,
   isCodexHookInputFor,
   isCodexHookOutputFor,
@@ -177,6 +185,24 @@ describe('session record guards', () => {
   it('checks Claude Code workflow journal records', () => {
     expect(isClaudeWorkflowJournalRecord({ type: 'launched' })).toBe(true);
     expect(isClaudeWorkflowJournalRecord({ type: 'ai-title' })).toBe(false);
+  });
+
+  it('checks Claude Code workflow script structures', () => {
+    expect(isClaudeWorkflowMeta({ name: 'a', description: 'b' })).toBe(true);
+    expect(isClaudeWorkflowMeta({ name: 'a' })).toBe(false);
+    expect(isClaudeWorkflowAgentOptions({ effort: 'low', isolation: 'worktree' })).toBe(true);
+    expect(isClaudeWorkflowAgentOptions({ effort: 'extreme' })).toBe(false);
+    expect(isClaudeWorkflowOutputSchema({ type: 'object', properties: {} })).toBe(true);
+    expect(isClaudeWorkflowOutputSchema({ type: 'array' })).toBe(false);
+    expect(isClaudeWorkflowToolInput({ name: 'deep-research' })).toBe(true);
+    expect(isClaudeWorkflowToolInput({})).toBe(false);
+    expect(isClaudeWorkflowToolOutput({ status: 'async_launched', taskId: 't' })).toBe(true);
+    expect(isClaudeWorkflowToolOutput({ taskId: 't' })).toBe(false);
+    expect(isClaudeWorkflowReference({ scriptPath: '/a.js' })).toBe(true);
+    expect(isClaudeWorkflowReference(1)).toBe(false);
+    expect(isClaudeWorkflowBudget({ total: null, spent: () => 0, remaining: () => 0 })).toBe(true);
+    expect(isClaudeWorkflowBudget({ total: 1 })).toBe(false);
+    expect(isClaudeWorkflowRunRecord({})).toBe(false);
   });
 
   it('checks Codex rollout records, in general and for one type', () => {

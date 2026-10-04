@@ -1,7 +1,7 @@
 import { $ } from 'bun';
 import pkg from '../package.json' with { type: 'json' };
 
-const entrypoints = ['./src/index.ts', './src/bin.ts'];
+const entrypoints = ['./src/index.ts', './src/bin.ts', './src/claude-workflow-globals.ts'];
 const external = Array.from(
   new Set([
     ...Object.keys(
