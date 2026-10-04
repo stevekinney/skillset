@@ -96,3 +96,34 @@ describe('ledger migration to XDG_CONFIG_HOME', () => {
     expect(JSON.stringify(ledger.items)).toContain('"name":"demo"');
   });
 });
+
+describe('a ledger skillset cannot read', () => {
+  it('stops sync before it writes anything, and leaves the ledger as it was', async () => {
+    const fixture = await makeFixture();
+    await addSkill(fixture, 'demo', validSkill);
+    const ledger = join(fixture.home, '.config', 'skillset', 'state.json');
+    await mkdir(join(ledger, '..'), { recursive: true });
+    await Bun.write(ledger, '{"version": 2, "items": {');
+
+    expect(await runCli(['sync'], fixture.dependencies)).not.toBe(0);
+    expect(fixture.lines.join('\n')).toContain(ledger);
+    expect(await Bun.file(ledger).text()).toBe('{"version": 2, "items": {');
+    expect(await exists(join(fixture.home, '.claude', 'skills', 'demo'))).toBe(false);
+  });
+
+  it('stops import before it writes the source, so the import can be retried', async () => {
+    const fixture = await makeFixture();
+    const installed = join(fixture.home, '.claude', 'skills', 'legacy');
+    await mkdir(installed, { recursive: true });
+    await Bun.write(
+      join(installed, 'SKILL.md'),
+      '---\nname: legacy\ndescription: Hand installed.\n---\n\nBody.\n',
+    );
+    const ledger = join(fixture.home, '.config', 'skillset', 'state.json');
+    await mkdir(join(ledger, '..'), { recursive: true });
+    await Bun.write(ledger, 'not json');
+
+    expect(await runCli(['import', 'skill', 'legacy'], fixture.dependencies)).not.toBe(0);
+    expect(await exists(join(fixture.root, 'skills', 'legacy'))).toBe(false);
+  });
+});

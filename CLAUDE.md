@@ -136,7 +136,7 @@ Hooks are configured in `lefthook.yml` and implemented as Bun TypeScript files u
 - **post-checkout** (`scripts/hooks/post-checkout.ts`): installs deps when `bun.lock` changes; surfaces config changes. Silent when nothing actionable changed.
 - **post-merge** (`scripts/hooks/post-merge.ts`): installs/cleans when dependencies or config changed; flags leftover conflict markers. Silent when nothing actionable changed.
 
-Hooks print only on failure (`output: [failure, execution_out]` in `lefthook.yml`), so a clean commit/push stays quiet. The TypeScript hook scripts use `chalk` for color, `change-case` for headings, and Bun's `$` and `Bun.write` for shell/IO.
+Hooks print only on failure (`output: [failure, execution_out]` in `lefthook.yml`), so a clean commit/push stays quiet. The TypeScript hook scripts import only Bun and Node built-ins (`node:util` `styleText` for color, Bun's `$` and `Bun.write` for shell/IO): hooks run in a fresh clone or worktree before `bun install`, so a package import would crash them. `test/hook-scripts.test.ts` enforces this.
 
 ### Claude Code Hooks
 

@@ -76,7 +76,6 @@
     "@modelcontextprotocol/sdk": "^1.30.0",
     "acorn": "^8.18.0",
     "chalk": "^6.0.0",
-    "change-case": "^5.4.4",
     "smol-toml": "^1.7.1",
     "yaml": "^2.9.0",
     "zod": "^4.4.3"

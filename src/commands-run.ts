@@ -280,6 +280,9 @@ export async function runDoctorTargets(
 export async function runImport(invocation: Invocation, context: RunContext): Promise<number> {
   const targets = contextTargets(invocation, context);
   const root = resolveSourceRoot(context.skillsetDirectory, context.cwd);
+  // Before writing the source: a ledger that can't be read would otherwise stop
+  // the adoption halfway, leaving a source that blocks retrying the import.
+  const ledger = await contextLedger(context, targets);
 
   const sourcePath = await importSource(
     {
@@ -303,7 +306,6 @@ export async function runImport(invocation: Invocation, context: RunContext): Pr
     return 1;
   }
 
-  const ledger = await contextLedger(context, targets);
   const kindFilter: KindFilter =
     invocation.importKind === 'skill'
       ? 'skills'
