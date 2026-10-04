@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'bun:test';
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -302,5 +302,30 @@ describe('executeSync', () => {
     expect(
       await readFile(join(targets.claude.skills, 'demo', 'references', 'notes.md'), 'utf8'),
     ).toBe('notes');
+  });
+});
+
+describe('symlinked supporting files', () => {
+  it('copies the linked content, not the link', async () => {
+    const targets = await makeTargets();
+    const sources = await makeSources();
+    const skill = sources.skills[0]!;
+    const original = join(skill.source.directory, 'original.txt');
+    await writeFile(original, 'shared data');
+    await symlink(original, join(skill.source.directory, 'data.txt'));
+    sources.skills[0] = { ...skill, source: { ...skill.source, supportingFiles: ['data.txt'] } };
+
+    const ledger = freshLedger();
+    const actions = await planSync(sources, targets, ledger, {
+      ...options,
+      targets: ['claude'],
+      kinds: ['skill'],
+    });
+    await executeSync(sources, actions, ledger, 'user');
+
+    const copied = join(targets.claude.skills, 'demo', 'data.txt');
+    const status = await lstat(copied);
+    expect(status.isSymbolicLink()).toBe(false);
+    expect(await readFile(copied, 'utf8')).toBe('shared data');
   });
 });

@@ -304,7 +304,9 @@ async function copySupportingFiles(skill: CompilableSkill, directory: string): P
   for (const relativePath of skill.source.supportingFiles) {
     const destination = join(directory, relativePath);
     await mkdir(dirname(destination), { recursive: true });
-    await cp(join(skill.source.directory, relativePath), destination);
+    // Copy a symlinked supporting file's content: a link copied as a link could
+    // dangle once it lands in the tool's directory.
+    await cp(join(skill.source.directory, relativePath), destination, { dereference: true });
   }
 }
 

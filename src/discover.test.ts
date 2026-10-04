@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'bun:test';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -106,5 +106,55 @@ describe('discoverSources', () => {
   it('throws when no source kind exists at all', async () => {
     const root = await makeRoot();
     expect(discoverSources(root)).rejects.toThrow('no sources found');
+  });
+});
+
+// Directory links are junctions on Windows, which need no special privilege.
+const directoryLinkType = process.platform === 'win32' ? 'junction' : 'dir';
+
+describe('symlinked sources', () => {
+  it('discovers a skill directory and an agent file that are symlinks', async () => {
+    const root = await makeRoot();
+    const elsewhere = join(root, 'elsewhere');
+    await mkdir(join(elsewhere, 'linked-skill'), { recursive: true });
+    await writeFile(
+      join(elsewhere, 'linked-skill', 'SKILL.md'),
+      '---\nname: linked-skill\ndescription: d\n---\nBody.\n',
+    );
+    await writeFile(
+      join(elsewhere, 'linked-agent.md'),
+      '---\nname: linked-agent\ndescription: d\n---\nPrompt.\n',
+    );
+    await mkdir(join(root, 'skills'), { recursive: true });
+    await mkdir(join(root, 'agents'), { recursive: true });
+    await symlink(
+      join(elsewhere, 'linked-skill'),
+      join(root, 'skills', 'linked-skill'),
+      directoryLinkType,
+    );
+    await symlink(join(elsewhere, 'linked-agent.md'), join(root, 'agents', 'linked-agent.md'));
+
+    // A broken link is skipped rather than failing discovery.
+    await symlink(join(elsewhere, 'missing'), join(root, 'skills', 'broken'), directoryLinkType);
+    const skills = await discoverSkills(join(root, 'skills'));
+    expect(skills.map((skill) => skill.name)).toEqual(['linked-skill']);
+    const agents = await discoverAgents(join(root, 'agents'));
+    expect(agents.map((agent) => agent.name)).toEqual(['linked-agent']);
+  });
+
+  it('collects files inside a symlinked subdirectory, and stops at a cycle', async () => {
+    const root = await makeRoot();
+    const skill = join(root, 'skills', 'demo');
+    await mkdir(skill, { recursive: true });
+    await writeFile(join(skill, 'SKILL.md'), '---\nname: demo\ndescription: d\n---\nBody.\n');
+    await mkdir(join(root, 'shared'), { recursive: true });
+    await writeFile(join(root, 'shared', 'notes.md'), 'notes');
+    await symlink(join(root, 'shared'), join(skill, 'references'), directoryLinkType);
+    await symlink(skill, join(skill, 'loop'), directoryLinkType);
+
+    const [discovered] = await discoverSkills(join(root, 'skills'));
+    expect(
+      discovered?.supportingFiles.map((file) => file.replaceAll('\\', '/')).toSorted(),
+    ).toEqual(['references/notes.md']);
   });
 });
