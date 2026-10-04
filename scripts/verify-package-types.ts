@@ -71,6 +71,39 @@ function fixture(specifiers: readonly string[]): string {
   return `${lines.join('\n')}\nexport {};\n`;
 }
 
+/** A workflow script that must type-check against the shipped globals. */
+function workflowFixture(globalsSpecifier: string): string {
+  return [
+    '// @ts-check',
+    `/// <reference types="${globalsSpecifier}" />`,
+    "export const meta = { name: 'fixture', description: 'Type-check fixture' }",
+    "phase('Scan')",
+    "const found = await agent('List the files', {",
+    "  schema: { type: 'object', required: ['files'], properties: { files: { type: 'array', items: { type: 'string' } } } },",
+    '})',
+    "const summary = await agent('Summarize', { effort: 'low' })",
+    '/** @type {string | null} */',
+    'const text = summary',
+    'const audits = await pipeline(',
+    '  found?.files ?? [],',
+    '  (file) => agent(`Audit ${file}`, { label: file }),',
+    '  (previous, file, index) => `${file}:${index}:${previous}`,',
+    ')',
+    '/** @type {Array<string | null>} */',
+    'const results = audits',
+    "const both = await parallel([() => agent('a'), () => agent('b', { schema: { type: 'object', properties: { count: { type: 'number' } } } })])",
+    'const count = both[1]?.count',
+    'log(`${text} ${results.length} ${count} ${budget.remaining()} ${args.length}`)',
+    '// @ts-expect-error effort is a closed set',
+    "await agent('x', { effort: 'extreme' })",
+    '// @ts-expect-error the schema root must be an object',
+    "await agent('x', { schema: { type: 'string' } })",
+    '// @ts-ignore a top-level return is valid in a workflow script but not in a module',
+    'return audits',
+    '',
+  ].join('\n');
+}
+
 const subpaths = typedSubpaths();
 if (subpaths.length === 0) {
   console.log('No typed export subpaths to verify.');
@@ -138,6 +171,38 @@ try {
   );
 
   await $`npx tsc --project tsconfig.json`.cwd(directory);
+
+  // The workflow globals are a declaration-only surface: a script picks them up
+  // through a triple-slash reference, not an import. Type-check a plain
+  // JavaScript script the way an author would, including two lines that must be
+  // rejected (`@ts-expect-error` fails the check if they stop being errors).
+  const globalsSpecifier = `${manifest.name}/workflow-globals`;
+  if (specifiers.includes(globalsSpecifier)) {
+    await writeFile(
+      join(directory, 'tsconfig.workflow.json'),
+      `${JSON.stringify(
+        {
+          compilerOptions: {
+            module: 'esnext',
+            moduleResolution: 'bundler',
+            target: 'es2022',
+            lib: ['es2022', 'esnext.disposable', 'dom'],
+            strict: true,
+            noEmit: true,
+            allowJs: true,
+            checkJs: true,
+            skipLibCheck: false,
+            types: ['node'],
+          },
+          files: ['workflow.js'],
+        },
+        undefined,
+        2,
+      )}\n`,
+    );
+    await writeFile(join(directory, 'workflow.js'), workflowFixture(globalsSpecifier));
+    await $`npx tsc --project tsconfig.workflow.json`.cwd(directory);
+  }
 
   // Types being correct does not mean the JavaScript loads. A bundler can emit
   // an entry that is nothing but `export { … }` with no imports and no
