@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import { resolveTargets } from './targets.js';
 
@@ -45,17 +45,22 @@ describe('resolveTargets', () => {
 });
 
 describe('config directory overrides', () => {
+  // Overrides resolve against the working directory, which on Windows also adds a
+  // drive letter to a root-relative path like `/configuration/claude`.
+  const claudeHome = resolve('/repo', '/configuration/claude');
+  const codexHome = resolve('/repo', '/configuration/codex');
+
   it('relocates Claude Code’s config home and .claude.json with CLAUDE_CONFIG_DIR', () => {
     const targets = resolveTargets('user', '/home/user', '/repo', {
       claudeConfigDirectory: '/configuration/claude',
     });
     expect(targets.claude).toEqual({
-      skills: join('/configuration/claude', 'skills'),
-      agents: join('/configuration/claude', 'agents'),
-      mcpConfig: join('/configuration/claude', '.claude.json'),
-      instructions: join('/configuration/claude', 'CLAUDE.md'),
-      hooksConfig: join('/configuration/claude', 'settings.json'),
-      defaultsConfig: join('/configuration/claude', 'settings.json'),
+      skills: join(claudeHome, 'skills'),
+      agents: join(claudeHome, 'agents'),
+      mcpConfig: join(claudeHome, '.claude.json'),
+      instructions: join(claudeHome, 'CLAUDE.md'),
+      hooksConfig: join(claudeHome, 'settings.json'),
+      defaultsConfig: join(claudeHome, 'settings.json'),
     });
   });
 
@@ -65,11 +70,11 @@ describe('config directory overrides', () => {
     });
     expect(targets.codex).toEqual({
       skills: join('/home/user', '.agents', 'skills'),
-      agents: join('/configuration/codex', 'agents'),
-      mcpConfig: join('/configuration/codex', 'config.toml'),
-      instructions: join('/configuration/codex', 'AGENTS.md'),
-      hooksConfig: join('/configuration/codex', 'hooks.json'),
-      defaultsConfig: join('/configuration/codex', 'config.toml'),
+      agents: join(codexHome, 'agents'),
+      mcpConfig: join(codexHome, 'config.toml'),
+      instructions: join(codexHome, 'AGENTS.md'),
+      hooksConfig: join(codexHome, 'hooks.json'),
+      defaultsConfig: join(codexHome, 'config.toml'),
     });
   });
 
@@ -79,7 +84,7 @@ describe('config directory overrides', () => {
       resolveTargets('user', '/home/user', '/repo', { claudeConfigDirectory: '', codexHome: '' }),
     ).toEqual(plain);
     const relative = resolveTargets('user', '/home/user', '/repo', { codexHome: 'codex-home' });
-    expect(relative.codex.agents).toBe(join('/repo', 'codex-home', 'agents'));
+    expect(relative.codex.agents).toBe(join(resolve('/repo', 'codex-home'), 'agents'));
   });
 
   it('leaves project scope and the ledger alone', () => {
