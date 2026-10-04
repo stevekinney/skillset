@@ -80,22 +80,34 @@ async function entryKind(
     if (entry.isDirectory()) return 'directory';
     return entry.isFile() ? 'file' : undefined;
   }
-  const target = await stat(join(directory, entry.name)).catch(() => undefined);
+  const target = await stat(join(directory, entry.name)).catch((cause: unknown) => {
+    // Only a missing target means a broken link; any other failure (a
+    // permission error, say) would otherwise silently drop the source.
+    if (isMissing(cause)) return undefined;
+    throw cause;
+  });
   if (target?.isDirectory()) return 'directory';
 
   return target?.isFile() ? 'file' : undefined;
+}
+
+function isMissing(cause: unknown): boolean {
+  if (typeof cause !== 'object' || cause === null || !('code' in cause)) return false;
+
+  return cause.code === 'ENOENT' || cause.code === 'ENOTDIR';
 }
 
 async function collectFiles(
   root: string,
   current: string,
   files: string[],
-  visited: Set<string> = new Set(),
+  ancestors: Set<string> = new Set(),
 ): Promise<void> {
-  // Real paths already walked, so a link back to an ancestor can't recurse forever.
+  // Only the directories on the current path: a link back to one of them is a
+  // cycle, while two links to the same directory elsewhere are both walked.
   const real = await realpath(current);
-  if (visited.has(real)) return;
-  visited.add(real);
+  if (ancestors.has(real)) return;
+  ancestors.add(real);
 
   const entries = await readdir(current, { withFileTypes: true });
 
@@ -104,11 +116,13 @@ async function collectFiles(
     const kind = await entryKind(current, entry);
 
     if (kind === 'directory') {
-      await collectFiles(root, path, files, visited);
+      await collectFiles(root, path, files, ancestors);
     } else if (kind === 'file') {
       files.push(relative(root, path));
     }
   }
+
+  ancestors.delete(real);
 }
 
 async function isDirectory(path: string): Promise<boolean> {

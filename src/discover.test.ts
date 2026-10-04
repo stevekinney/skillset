@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'bun:test';
-import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -156,5 +156,45 @@ describe('symlinked sources', () => {
     expect(
       discovered?.supportingFiles.map((file) => file.replaceAll('\\', '/')).toSorted(),
     ).toEqual(['references/notes.md']);
+  });
+});
+
+describe('symlink aliases and unreadable targets', () => {
+  it('collects every alias of the same directory, since an alias is not a cycle', async () => {
+    const root = await makeRoot();
+    const skill = join(root, 'skills', 'demo');
+    await mkdir(skill, { recursive: true });
+    await writeFile(join(skill, 'SKILL.md'), '---\nname: demo\ndescription: d\n---\nBody.\n');
+    await mkdir(join(root, 'shared'), { recursive: true });
+    await writeFile(join(root, 'shared', 'notes.md'), 'notes');
+    await symlink(join(root, 'shared'), join(skill, 'first'), directoryLinkType);
+    await symlink(join(root, 'shared'), join(skill, 'second'), directoryLinkType);
+
+    const [discovered] = await discoverSkills(join(root, 'skills'));
+    const files = discovered?.supportingFiles.map((file) => file.replaceAll('\\', '/')).toSorted();
+    expect(files).toEqual(['first/notes.md', 'second/notes.md']);
+  });
+
+  it('surfaces a target it cannot read, instead of treating it as a broken link', async () => {
+    // POSIX permissions only: Windows has no mode bits to deny.
+    if (process.platform === 'win32') return;
+    const root = await makeRoot();
+    await mkdir(join(root, 'agents'), { recursive: true });
+    await mkdir(join(root, 'locked'), { recursive: true });
+    await writeFile(
+      join(root, 'locked', 'agent.md'),
+      '---\nname: agent\ndescription: d\n---\nPrompt.\n',
+    );
+    await symlink(join(root, 'locked', 'agent.md'), join(root, 'agents', 'agent.md'));
+    await chmod(join(root, 'locked'), 0o000);
+    try {
+      const failure = await discoverAgents(join(root, 'agents')).then(
+        () => undefined,
+        (cause: unknown) => cause,
+      );
+      expect(failure).toBeInstanceOf(Error);
+    } finally {
+      await chmod(join(root, 'locked'), 0o755);
+    }
   });
 });
