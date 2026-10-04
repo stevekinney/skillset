@@ -40,6 +40,8 @@ function legacyEvent<Type extends string>(type: Type) {
   return z.looseObject({ type: z.literal(type) });
 }
 
+const httpStatusDetail = z.looseObject({ http_status_code: z.number().nullable() });
+
 /** `CodexErrorInfo`: a bare string for unit variants, a one-key object for the data variants. */
 const codexErrorInfoSchema = z.union([
   z.enum([
@@ -61,20 +63,13 @@ const codexErrorInfoSchema = z.union([
     'thread_rollback_failed',
     'other',
   ]),
+  // The data variants: an object with exactly one required tag.
+  z.looseObject({ http_connection_failed: httpStatusDetail }),
+  z.looseObject({ response_stream_connection_failed: httpStatusDetail }),
+  z.looseObject({ response_stream_disconnected: httpStatusDetail }),
+  z.looseObject({ response_too_many_failed_attempts: httpStatusDetail }),
   z.looseObject({
-    http_connection_failed: z.looseObject({ http_status_code: z.number().nullable() }).optional(),
-    response_stream_connection_failed: z
-      .looseObject({ http_status_code: z.number().nullable() })
-      .optional(),
-    response_stream_disconnected: z
-      .looseObject({ http_status_code: z.number().nullable() })
-      .optional(),
-    response_too_many_failed_attempts: z
-      .looseObject({ http_status_code: z.number().nullable() })
-      .optional(),
-    active_turn_not_steerable: z
-      .looseObject({ turn_kind: z.enum(['review', 'compact']) })
-      .optional(),
+    active_turn_not_steerable: z.looseObject({ turn_kind: z.enum(['review', 'compact']) }),
   }),
 ]);
 

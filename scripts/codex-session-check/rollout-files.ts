@@ -1,4 +1,4 @@
-import { createReadStream } from 'node:fs';
+import { createReadStream, existsSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -6,17 +6,29 @@ import { join } from 'node:path';
 import { checkRecord } from './check-record.js';
 import type { Statistics } from './statistics.js';
 
-/** Where Codex keeps rollouts: live sessions by date, and archived ones. */
+/**
+ * Where Codex keeps rollouts: live sessions by date, and archived ones. Only the
+ * ones that exist, since a machine may have no archive; an explicit `--root`
+ * that is missing or unreadable is an error instead.
+ */
 export function defaultRolloutRoots(): string[] {
-  return [join(homedir(), '.codex', 'sessions'), join(homedir(), '.codex', 'archived_sessions')];
+  const roots = [
+    join(homedir(), '.codex', 'sessions'),
+    join(homedir(), '.codex', 'archived_sessions'),
+  ];
+  return roots.filter((root) => existsSync(root));
 }
 
-/** Every `.jsonl` file under the roots, sorted so shards are deterministic. */
+/**
+ * Every `.jsonl` file under the roots, sorted so shards are deterministic. A root
+ * or subdirectory that can't be read throws: silently skipping it would report a
+ * clean result for a corpus that was never checked.
+ */
 export async function listRolloutFiles(roots: string[]): Promise<string[]> {
   const files: string[] = [];
   const pending = [...roots];
   for (let directory = pending.pop(); directory !== undefined; directory = pending.pop()) {
-    const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
+    const entries = await readdir(directory, { withFileTypes: true });
     for (const entry of entries) {
       const path = join(directory, entry.name);
       if (entry.isDirectory()) pending.push(path);

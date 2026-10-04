@@ -175,13 +175,21 @@ export function buildCodexResponseItemSchema<Extra extends z.ZodRawShape>(extraS
       revised_prompt: z.string().optional(),
       result: z.string(),
     }),
+    // Separate variants (not one `z.enum` type) so `CodexResponseItemFor` can
+    // narrow to each: `Extract` does not distribute over a union-typed `type`.
     z.looseObject({
-      type: z.enum(['compaction', 'compaction_summary']),
+      type: z.literal('compaction'),
+      ...base,
+      encrypted_content: z.string(),
+    }),
+    z.looseObject({
+      type: z.literal('compaction_summary'),
       ...base,
       encrypted_content: z.string(),
     }),
     z.looseObject({
       type: z.literal('configuration_update'),
+      ...extraShape,
       reasoning: z.record(z.string(), z.unknown()),
     }),
     z.looseObject({

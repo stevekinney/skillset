@@ -62,12 +62,15 @@ export function createStatistics(): Statistics {
 }
 
 export function createTally(): ValueTally {
-  return { total: 0, values: {}, overflowed: false };
+  // A null-prototype map, so values named like `constructor` or `__proto__`
+  // (real tool and field names) are ordinary keys, not inherited members.
+  const values: Record<string, number> = Object.create(null);
+  return { total: 0, values, overflowed: false };
 }
 
 export function addToTally(tally: ValueTally, value: string, count = 1): void {
   tally.total += count;
-  if (value in tally.values) {
+  if (Object.hasOwn(tally.values, value)) {
     tally.values[value] = (tally.values[value] ?? 0) + count;
   } else if (Object.keys(tally.values).length < distinctValueLimit) {
     tally.values[value] = count;

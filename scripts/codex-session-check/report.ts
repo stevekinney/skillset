@@ -20,10 +20,12 @@ function sortedEntries<Value>(map: Record<string, Value>, weigh: (value: Value) 
 }
 
 /**
- * Identifiers and search-result content are never printed, however short their
- * tally: a subset run can otherwise show a handful of real values.
+ * Identifiers and anything that can carry conversation or tool content are never
+ * printed, however short and repeated their values: a short message (`hello`) or
+ * query would otherwise be shown verbatim.
  */
-const withheldPath = /(?:_id|Id|\.id|_ids|_hash|\.domain|\.url|\.title|\.snippet)(?:\[\])?$/;
+const withheldPath =
+  /(?:_id|Id|\.id|_ids|_hash|\.domain|\.url|\.title|\.snippet|\.(?:text|query|queries|prompt|revised_prompt|message|messages|content|summary|instructions|output|stdout|stderr|aggregated_output|arguments|input|command|cwd|path|reason|explanation|delta|patch|diff|body|description|last_agent_message|result|name))(?:\[\])?$/;
 
 function printable(key: string, tally: ValueTally): boolean {
   return !withheldPath.test(key) && isPrintableTally(tally);
@@ -127,5 +129,10 @@ export function renderReport(statistics: Statistics): Report {
     ...section('3d. String fields deliberately left open', sets.open),
     ...section(`Loose paths real data reached: ${loose.length}`, loose),
   ].join('\n');
-  return { text, failed: failureCount > 0 || unmodeled.length > 0 || rejected.length > 0 };
+  // A malformed line before a file's last line means the file is corrupt; only a
+  // final line is tolerated, because a live session may be mid-write.
+  const corruptLines = statistics.invalidJson.count - statistics.invalidJson.finalLines;
+  const failed =
+    failureCount > 0 || corruptLines > 0 || unmodeled.length > 0 || rejected.length > 0;
+  return { text, failed };
 }
