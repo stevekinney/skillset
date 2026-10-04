@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 
-import { retryOnWindowsLock, writeUnlessChanged } from './file-retry.js';
+import { retryOnWindowsLock } from './file-retry.js';
 
 function lockError(code: string): Error {
   return Object.assign(new Error(`${code}: locked`), { code });
@@ -82,58 +79,5 @@ describe('retryOnWindowsLock', () => {
     const started = performance.now();
     expect(await retryOnWindowsLock(operation, { platform: 'win32' })).toBe('done');
     expect(performance.now() - started).toBeGreaterThanOrEqual(40);
-  });
-});
-
-/** A write that is locked on its first attempt and succeeds after. */
-const lockedOnce = () => {
-  let calls = 0;
-  return async (path: string, contents: string) => {
-    calls += 1;
-    if (calls === 1) throw Object.assign(new Error('EBUSY: locked'), { code: 'EBUSY' });
-    await writeFile(path, contents, 'utf8');
-  };
-};
-
-describe('writeUnlessChanged', () => {
-  it('retries a locked write when nothing changed the file meanwhile', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'skillset-retry-'));
-    const path = join(directory, 'settings.json');
-    await writeFile(path, 'original');
-    await writeUnlessChanged(path, 'ours', {
-      platform: 'win32',
-      wait: async () => {},
-      write: lockedOnce(),
-    });
-    expect(await readFile(path, 'utf8')).toBe('ours');
-    await rm(directory, { recursive: true, force: true });
-  });
-
-  it('refuses to overwrite changes another program saved while it held the lock', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'skillset-retry-'));
-    const path = join(directory, 'settings.json');
-    await writeFile(path, 'original');
-    const failure = await writeUnlessChanged(path, 'ours', {
-      platform: 'win32',
-      // The other program saves its own change while skillset waits.
-      wait: async () => {
-        await writeFile(path, 'theirs');
-      },
-      write: lockedOnce(),
-    }).then(
-      () => undefined,
-      (cause: unknown) => cause,
-    );
-    expect(String(failure)).toContain('changed while another program held it');
-    expect(await readFile(path, 'utf8')).toBe('theirs');
-    await rm(directory, { recursive: true, force: true });
-  });
-
-  it('writes a file that did not exist yet', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'skillset-retry-'));
-    const path = join(directory, 'new.json');
-    await writeUnlessChanged(path, 'fresh');
-    expect(await readFile(path, 'utf8')).toBe('fresh');
-    await rm(directory, { recursive: true, force: true });
   });
 });

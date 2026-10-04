@@ -1,7 +1,8 @@
-import { copyFile, mkdir, readFile } from 'node:fs/promises';
+import { copyFile, mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
-import { retryOnWindowsLock, writeUnlessChanged } from './file-retry.js';
+import { isMissingFile, readIfExists } from './read-if-exists.js';
+import { retryOnWindowsLock } from './file-retry.js';
 import { withoutByteOrderMark } from './byte-order-mark.js';
 import { isMapping } from './frontmatter.js';
 
@@ -20,7 +21,7 @@ export type EmbeddedAction = {
  * anything unparseable or non-object is refused rather than clobbered.
  */
 export async function readJsonConfig(path: string): Promise<Record<string, unknown>> {
-  const raw = await readFile(path, 'utf8').catch(() => undefined);
+  const raw = await readIfExists(path);
   if (raw === undefined) return {};
 
   const parsed: unknown = JSON.parse(withoutByteOrderMark(raw));
@@ -34,8 +35,7 @@ export async function readJsonConfig(path: string): Promise<Record<string, unkno
 /** Write a JSON config file with the project's 2-space formatting. */
 export async function writeJsonConfig(path: string, value: unknown): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
-  // Shared with Claude Code, which rewrites it often: never retry over its changes.
-  await writeUnlessChanged(path, `${JSON.stringify(value, undefined, 2)}\n`);
+  await writeFile(path, `${JSON.stringify(value, undefined, 2)}\n`, 'utf8');
 }
 
 /** Copy `path` to `path.skillset-backup` once per run (tracked via `backedUp`). */
@@ -43,7 +43,11 @@ export async function backupOnce(path: string, backedUp: Set<string>): Promise<v
   if (backedUp.has(path)) return;
 
   backedUp.add(path);
-  await retryOnWindowsLock(() => copyFile(path, `${path}.skillset-backup`)).catch(() => {
-    // Nothing to back up when the file does not exist yet.
-  });
+  await retryOnWindowsLock(() => copyFile(path, `${path}.skillset-backup`)).catch(
+    (cause: unknown) => {
+      // Nothing to back up when the file doesn't exist yet. Any other failure
+      // stops the write: editing a config without its backup isn't safe.
+      if (!isMissingFile(cause)) throw cause;
+    },
+  );
 }

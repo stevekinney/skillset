@@ -81,7 +81,8 @@ bun run package:check    # Run publint + @arethetypeswrong/cli on packed tarball
 - `mcp-apply.ts` / `hooks-apply.ts` / `defaults-apply.ts` — surgical application to the shared config files, entry-level ledger ownership, backups.
 - `claude-hook-shared.ts` / `claude-hook-input-schemas.ts` / `claude-hook-output-schemas.ts` / `codex-hook-payloads.ts` — public Zod schemas for every hook event's stdin input and stdout output (inputs loose, Codex outputs strict), with `parse*HookInput`/`parse*HookOutput` helpers; exported from `index.ts` for hook authors.
 - `byte-order-mark.ts` — `withoutByteOrderMark`, which every reader of a user-editable file uses (JSON configs, frontmatter, `doctor --targets`).
-- `file-retry.ts` — `retryOnWindowsLock`: retries a write, rename, copy, or removal on Windows when another process briefly holds the file (`EPERM`/`EBUSY`/`EACCES`, about 1.5s of backoff); fails at once elsewhere. Wrap destination-side file operations in it; for a file another program also writes (a tool's shared config), use `writeUnlessChanged`, which only retries while the file is unchanged.
+- `file-retry.ts` — `retryOnWindowsLock`: retries a write, rename, copy, or removal on Windows when another process briefly holds the file (`EPERM`/`EBUSY`/`EACCES`, about 1.5s of backoff); fails at once elsewhere. Only for files skillset alone owns (the ledger, config backups): retrying a write over a file another program may be changing can lose its changes.
+- `read-if-exists.ts` — `readIfExists`/`isMissingFile`: only a missing file reads as absent; any other read error throws, so a locked or unreadable config is never treated as empty and rewritten.
 - `config-files.ts` — shared JSON config read/write + backup helpers and the `EmbeddedAction` type.
 - `toml-splice.ts` — comment-preserving `[section]` and top-level-scalar splicing for `config.toml`.
 - `import.ts` — reverse-compiles installed skills/agents/instructions into sources.

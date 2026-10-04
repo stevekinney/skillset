@@ -1,7 +1,7 @@
 import { cp, lstat, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 
-import { retryOnWindowsLock } from './file-retry.js';
+import { readIfExists } from './read-if-exists.js';
 import { emitClaudeAgent, emitCodexAgent, GENERATED_MARKER_TOML } from './agent-emit.js';
 import type { ParsedAgentFile } from './agent-frontmatter.js';
 import type { SourceAgent, SourceSkill } from './discover.js';
@@ -152,15 +152,7 @@ export function agentFileName(name: string, target: Target): string {
  * over whatever it holds, so that error surfaces instead.
  */
 async function fileExists(path: string): Promise<boolean> {
-  try {
-    await readFile(path, 'utf8');
-    return true;
-  } catch (cause) {
-    const code =
-      typeof cause === 'object' && cause !== null && 'code' in cause ? cause.code : undefined;
-    if (code === 'ENOENT' || code === 'ENOTDIR') return false;
-    throw cause;
-  }
+  return (await readIfExists(path)) !== undefined;
 }
 
 async function planSkillActions(
@@ -307,7 +299,7 @@ async function writeEmittedFiles(directory: string, files: EmittedFile[]): Promi
   for (const file of files) {
     const path = join(directory, file.relativePath);
     await mkdir(dirname(path), { recursive: true });
-    await retryOnWindowsLock(() => writeFile(path, file.contents, 'utf8'));
+    await writeFile(path, file.contents, 'utf8');
     hashes[file.relativePath] = hashContent(file.contents);
   }
 
@@ -320,15 +312,13 @@ async function copySupportingFiles(skill: CompilableSkill, directory: string): P
     await mkdir(dirname(destination), { recursive: true });
     // Copy a symlinked supporting file's content: a link copied as a link could
     // dangle once it lands in the tool's directory.
-    await retryOnWindowsLock(() =>
-      cp(join(skill.source.directory, relativePath), destination, { dereference: true }),
-    );
+    await cp(join(skill.source.directory, relativePath), destination, { dereference: true });
   }
 }
 
 async function writeSingleFile(path: string, contents: string): Promise<FileHashes> {
   await mkdir(dirname(path), { recursive: true });
-  await retryOnWindowsLock(() => writeFile(path, contents, 'utf8'));
+  await writeFile(path, contents, 'utf8');
 
   return { '': hashContent(contents) };
 }
@@ -368,7 +358,7 @@ export async function executeSync(
   for (const action of actions) {
     if (action.action === 'skip-unmanaged' || action.action === 'skip-drifted') continue;
 
-    await retryOnWindowsLock(() => rm(action.path, { recursive: true, force: true }));
+    await rm(action.path, { recursive: true, force: true });
     if (action.action === 'prune') {
       forgetItem(ledger, fileKey(action.path));
       continue;

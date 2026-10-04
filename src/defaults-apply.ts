@@ -1,9 +1,9 @@
-import { mkdir, readFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 import { parse as parseToml } from 'smol-toml';
 
-import { writeUnlessChanged } from './file-retry.js';
+import { readIfExists } from './read-if-exists.js';
 import { withoutByteOrderMark } from './byte-order-mark.js';
 import {
   backupOnce,
@@ -44,7 +44,7 @@ function desiredEntries(
 async function currentValues(target: Target, file: string): Promise<Record<string, unknown>> {
   if (target === 'claude') return readJsonConfig(file);
 
-  const raw = await readFile(file, 'utf8').catch(() => undefined);
+  const raw = await readIfExists(file);
   if (raw === undefined) return {};
 
   let parsed: unknown;
@@ -148,7 +148,7 @@ async function applyCodexDefaults(
   actions: EmbeddedAction[],
   file: string,
 ): Promise<void> {
-  let contents = await readFile(file, 'utf8').catch(() => '');
+  let contents = (await readIfExists(file)) ?? '';
 
   for (const action of actions) {
     const value = action.action === 'prune' ? undefined : JSON.stringify(desired[action.name]);
@@ -156,7 +156,7 @@ async function applyCodexDefaults(
   }
 
   await mkdir(dirname(file), { recursive: true });
-  await writeUnlessChanged(file, contents);
+  await writeFile(file, contents, 'utf8');
 }
 
 /**

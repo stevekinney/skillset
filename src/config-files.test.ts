@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it } from 'bun:test';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { readJsonConfig } from './config-files.js';
+import { backupOnce, readJsonConfig } from './config-files.js';
 
 const temporaryDirectories: string[] = [];
 
@@ -23,5 +23,23 @@ describe('readJsonConfig', () => {
     await writeFile(path, '﻿{"model": "sonnet"}\n');
 
     expect(await readJsonConfig(path)).toEqual({ model: 'sonnet' });
+  });
+});
+
+describe('backupOnce', () => {
+  it('skips a file that does not exist yet, but stops when the backup itself fails', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'skillset-backup-'));
+    temporaryDirectories.push(directory);
+    await backupOnce(join(directory, 'absent.json'), new Set());
+
+    const path = join(directory, 'settings.json');
+    await writeFile(path, '{}');
+    // A directory where the backup belongs makes the copy fail for a real reason.
+    await mkdir(`${path}.skillset-backup`);
+    const failure = await backupOnce(path, new Set()).then(
+      () => undefined,
+      (cause: unknown) => cause,
+    );
+    expect(failure).toBeInstanceOf(Error);
   });
 });
