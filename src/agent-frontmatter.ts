@@ -3,7 +3,6 @@ import { z } from 'zod';
 import { claudeEffortSchema, splitFrontmatter } from './frontmatter.js';
 import { codexSkillsSchema, codexToolsSchema } from './codex-agent-tables.js';
 import { claudeHookSettingsSchema, codexHookSettingsSchema } from './hook-schema.js';
-import { claudeAgentMcpServerSchema } from './agent-mcp-servers.js';
 import { codexMcpServerSchema } from './mcp-schema.js';
 
 const stringOrStringList = z.union([z.string(), z.array(z.string())]);
@@ -70,7 +69,9 @@ export const agentFrontmatterSchema = z.object({
     .optional(),
   maxTurns: z.number().int().positive().optional(),
   skills: z.array(z.string()).optional(),
-  mcpServers: z.array(claudeAgentMcpServerSchema).optional(),
+  // Any item: Claude Code drops an invalid item and still loads the agent, so
+  // doctor warns (via claudeAgentMcpItemProblems) instead of failing the parse.
+  mcpServers: z.array(z.unknown()).optional(),
   hooks: claudeHookSettingsSchema.optional(),
   memory: z.enum(['user', 'project', 'local']).optional(),
   background: claudeAgentBoolean.optional(),

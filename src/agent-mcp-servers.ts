@@ -2,7 +2,12 @@ import { z } from 'zod';
 
 import type { Issue } from './doctor.js';
 import { isMapping } from './frontmatter.js';
-import { claudeMcpEntryProblems, type McpProblem, unknownClaudeMcpFields } from './mcp-schema.js';
+import {
+  claudeMcpEntryProblems,
+  claudeMcpServerSchema,
+  type McpProblem,
+  unknownClaudeMcpFields,
+} from './mcp-schema.js';
 
 function warning(message: string): Issue {
   return { severity: 'warning', message };
@@ -22,12 +27,23 @@ const claudeAiProxySchema = z.looseObject({
 });
 
 /**
- * One item of a Claude subagent's `mcpServers` list, as read from frontmatter.
- * Claude Code validates each item when it loads the agent file, logs an
- * invalid one, drops it, and still loads the agent. So the schema accepts any
- * item and `claudeAgentMcpItemProblems` reports what Claude would drop.
+ * One item of a Claude subagent's `mcpServers` list that Claude Code keeps:
+ * the name of an already-configured server, or a mapping from a server name
+ * to a full inline entry. Claude Code drops any other item (logging it) and
+ * still loads the agent, so agent frontmatter accepts every item and
+ * `claudeAgentMcpItemProblems` reports what Claude would drop.
  */
-export const claudeAgentMcpServerSchema = z.unknown();
+export const claudeAgentMcpServerSchema = z.union([
+  z.string(),
+  z
+    .record(z.string(), claudeMcpServerSchema)
+    .refine((mapping) => Object.keys(mapping).length === 1, {
+      message: 'an inline server is a mapping with exactly one server name',
+    }),
+]);
+
+/** A subagent `mcpServers` item Claude Code keeps. */
+export type ClaudeAgentMcpServer = z.infer<typeof claudeAgentMcpServerSchema>;
 
 /**
  * Why Claude Code would drop one subagent `mcpServers` item: it is either the

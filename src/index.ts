@@ -5,6 +5,7 @@ export {
   type AgentFrontmatter,
   type ParsedAgentFile,
 } from './agent-frontmatter.js';
+export { claudeAgentMcpServerSchema, type ClaudeAgentMcpServer } from './agent-mcp-servers.js';
 export {
   claudeHookInputSchema,
   claudeHookInputSchemas,
@@ -15,10 +16,12 @@ export {
 } from './claude-hook-input-schemas.js';
 export {
   claudeAsyncHookOutputSchema,
+  claudeHookOutputOrAsyncSchema,
   claudeHookOutputSchema,
   claudeHookSpecificOutputSchema,
   claudeHookSpecificOutputSchemas,
   parseClaudeHookOutput,
+  safeParseClaudeHookOutput,
   type ClaudeAsyncHookOutput,
   type ClaudeHookOutput,
 } from './claude-hook-output-schemas.js';
@@ -39,6 +42,7 @@ export {
   parseCodexHookInput,
   parseCodexHookOutput,
   safeParseCodexHookInput,
+  safeParseCodexHookOutput,
   type CodexHookEventName,
   type CodexHookInput,
   type CodexHookInputFor,
@@ -60,8 +64,17 @@ export {
 } from './commands.js';
 export { type EmbeddedAction } from './config-files.js';
 export {
+  codexSkillsSchema,
+  codexToolsSchema,
+  type CodexSkills,
+  type CodexTools,
+} from './codex-agent-tables.js';
+export {
   checkDefaultsSource,
+  claudeSettingsEffortSchema,
+  defaultsSourceSchema,
   parseDefaultsSource,
+  type ClaudeSettingsEffort,
   type DefaultsSource,
 } from './defaults-config.js';
 export { itemStatus, type TargetStatus } from './drift.js';
@@ -88,15 +101,31 @@ export {
 export { emitSkill, GENERATED_MARKER, type EmittedFile } from './emit.js';
 export { environment, parseEnvironment, type Environment } from './environment.js';
 export {
+  claudeEffortSchema,
+  openaiConfigurationSchema,
   parseSkillFile,
   skillFrontmatterSchema,
   splitFrontmatter,
+  type ClaudeEffort,
+  type OpenaiConfiguration,
   type ParsedSkillFile,
   type SkillFrontmatter,
   type Target,
 } from './frontmatter.js';
 export { commandHelp, USAGE } from './help.js';
-export { checkHooksSource, parseHooksSource, type HooksSource } from './hooks-config.js';
+export {
+  claudeHookSettingsSchema,
+  codexHookSettingsSchema,
+  type ClaudeHookSettings,
+  type CodexHookSettings,
+} from './hook-schema.js';
+export {
+  checkHooksSource,
+  hooksSourceSchema,
+  parseHooksSource,
+  type HookDefinition,
+  type HooksSource,
+} from './hooks-config.js';
 export { importSource, type ImportKind, type ImportRequest } from './import.js';
 export { checkInstructions, emitInstructions } from './instructions.js';
 export {
@@ -117,10 +146,22 @@ export {
   checkMcpSource,
   claudeMcpEntry,
   codexMcpSection,
+  mcpSourceSchema,
   parseMcpSource,
   type McpServer,
+  type McpSource,
   type ParsedMcpSource,
 } from './mcp-config.js';
+export {
+  claudeMcpOverrideSchema,
+  claudeMcpServerSchema,
+  codexMcpFieldsSchema,
+  codexMcpServerSchema,
+  type ClaudeMcpOverride,
+  type ClaudeMcpServer,
+  type CodexMcpFields,
+  type CodexMcpServer,
+} from './mcp-schema.js';
 export { createMcpServer, createStdioTransport, runMcpServer } from './mcp-server.js';
 export {
   executeSync,
@@ -134,3 +175,28 @@ export {
 export { resolveTargets, type Scope, type Targets, type ToolTargets } from './targets.js';
 export { renderConditionals, type RenderResult, type TemplateError } from './template.js';
 export { spliceTomlScalar, spliceTomlSection } from './toml-splice.js';
+export {
+  isAgentFrontmatter,
+  isClaudeAgentMcpServer,
+  isClaudeEffort,
+  isClaudeHookInput,
+  isClaudeHookInputFor,
+  isClaudeHookOutput,
+  isClaudeHookSettings,
+  isClaudeMcpOverride,
+  isClaudeMcpServer,
+  isClaudeSettingsEffort,
+  isCodexHookInput,
+  isCodexHookInputFor,
+  isCodexHookOutputFor,
+  isCodexHookSettings,
+  isCodexMcpFields,
+  isCodexMcpServer,
+  isCodexSkills,
+  isCodexTools,
+  isDefaultsSource,
+  isHooksSource,
+  isMcpSource,
+  isOpenaiConfiguration,
+  isSkillFrontmatter,
+} from './type-guards.js';

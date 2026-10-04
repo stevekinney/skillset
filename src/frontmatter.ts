@@ -32,6 +32,8 @@ export const claudeEffortSchema = z.union([
   z.enum(['low', 'medium', 'high', 'xhigh', 'max']),
   z.number().int(),
 ]);
+/** A Claude Code skill or subagent `effort` value. */
+export type ClaudeEffort = z.infer<typeof claudeEffortSchema>;
 
 const openaiInterfaceSchema = z.object({
   display_name: z.string().optional(),
@@ -57,7 +59,8 @@ const openaiToolDependencySchema = z.object({
     .optional(),
 });
 
-const openaiSchema = z.object({
+/** The `agents/openai.yaml` file Codex reads beside a SKILL.md. */
+export const openaiConfigurationSchema = z.object({
   interface: openaiInterfaceSchema.optional(),
   policy: z
     .object({
@@ -107,14 +110,14 @@ export const skillFrontmatterSchema = z.object({
   shell: z.enum(['bash', 'powershell']).optional(),
 
   // Codex only — compiled to agents/openai.yaml.
-  openai: openaiSchema.optional(),
+  openai: openaiConfigurationSchema.optional(),
 });
 
 /** A validated union frontmatter block. */
 export type SkillFrontmatter = z.infer<typeof skillFrontmatterSchema>;
 
 /** The shape of an emitted `agents/openai.yaml` file. */
-export type OpenaiConfiguration = z.infer<typeof openaiSchema>;
+export type OpenaiConfiguration = z.infer<typeof openaiConfigurationSchema>;
 
 const CLAUDE_ONLY_KEYS = [
   'when_to_use',

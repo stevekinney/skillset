@@ -62,6 +62,20 @@ Compiling one source in memory (no writes — this is what `skillset show` calls
 - `parseSkillFile`/`parseAgentFile` parse frontmatter + body into `ParsedSkillFile`/`ParsedAgentFile`; `skillFrontmatterSchema`/`agentFrontmatterSchema` are the underlying Zod schemas; `splitFrontmatter` separates the YAML block from the body.
 - `parseMcpSource`/`claudeMcpEntry`/`codexMcpSection` and `parseHooksSource`/`parseDefaultsSource` parse and project `mcp-servers.yaml`/`hooks.yaml`/`defaults.yaml` the same way.
 
+Schemas and type guards:
+
+- Every schema skillset validates with is exported, with its inferred type:
+  - Source files: `skillFrontmatterSchema`, `agentFrontmatterSchema`, `hooksSourceSchema`, `mcpSourceSchema`, and `defaultsSourceSchema`.
+  - Tool configuration:
+    - `claudeHookSettingsSchema` and `codexHookSettingsSchema` for `hooks` blocks.
+    - `claudeMcpServerSchema` and `codexMcpServerSchema` for MCP server entries.
+    - `claudeAgentMcpServerSchema` for a subagent `mcpServers` item.
+    - `codexSkillsSchema` and `codexToolsSchema` for the Codex subagent tables.
+    - `openaiConfigurationSchema` for `agents/openai.yaml`.
+    - `claudeEffortSchema` and `claudeSettingsEffortSchema`.
+  - Per-tool override blocks: `claudeMcpOverrideSchema` and `codexMcpFieldsSchema`.
+- Each top-level schema has a matching type guard, such as `isSkillFrontmatter`, `isMcpSource`, `isClaudeHookSettings`, or `isCodexMcpServer`. Guards narrow to the schema's input type (`z.input`). A few schemas convert values while parsing: skill booleans accept `"yes"`, and `hooks.yaml` handlers default `type`. A value that passes the guard still has its original, unconverted shape, so parse it with the schema to get converted values.
+
 Running or previewing a sync:
 
 - `runSync(invocation, analysis, context)`, `runDoctorTargets(invocation, context)`, and `runImport(invocation, context)` are the same orchestration `skillset sync`/`doctor --targets`/`import` run, taking a `RunContext` (`{ homeDirectory, cwd, log }`) instead of stdio; `parseInvocation(argv)` builds the `Invocation` they expect from argv, or returns a `UsageOutcome` on a bad flag.
@@ -87,7 +101,8 @@ Configuration and help text:
 Hook payloads (for writing hook scripts):
 
 - `claudeHookInputSchema` (33 events, discriminated on `hook_event_name`) and `codexHookInputSchema` (12 events) validate the JSON a hook receives on stdin; `claudeHookInputSchemas`/`codexHookInputSchemas` hold the per-event schemas keyed by event name. `parseClaudeHookInput(payload)`/`parseCodexHookInput(payload)` dispatch on `hook_event_name` and throw a `ZodError` on a mismatch; `safeParseClaudeHookInput`/`safeParseCodexHookInput` return a result instead.
-- `claudeHookOutputSchema` (with its 22 `claudeHookSpecificOutputSchemas` variants and the `claudeAsyncHookOutputSchema` async form) and `codexHookOutputSchemas` (keyed by event) describe what a hook may print to stdout; `parseClaudeHookOutput(payload)` and `parseCodexHookOutput(eventName, payload)` validate it. `claudeHookEventNames`/`codexHookEventNames` list the events.
+- `claudeHookOutputSchema` (with its 22 `claudeHookSpecificOutputSchemas` variants and the `claudeAsyncHookOutputSchema` async form) and `codexHookOutputSchemas` (keyed by event) describe what a hook may print to stdout; `parseClaudeHookOutput(payload)` and `parseCodexHookOutput(eventName, payload)` validate it, and `safeParseClaudeHookOutput`/`safeParseCodexHookOutput` return a result instead. `claudeHookEventNames`/`codexHookEventNames` list the events.
+- Type guards: `isClaudeHookInput`, `isClaudeHookOutput`, and `isCodexHookInput` check a whole payload. The per-event guards `isClaudeHookInputFor(eventName, value)`, `isCodexHookInputFor(eventName, value)`, and `isCodexHookOutputFor(eventName, value)` narrow to that event's shape.
 - Input and Claude output schemas are `z.looseObject`, so a field a newer Claude Code or Codex adds never fails a parse and survives into the parsed value. Codex output schemas are strict, because Codex marks a hook run Failed when stdout carries an unknown key. Rules the schemas cannot express (a Codex `block` needs a non-empty `reason`, PreToolUse `allow` needs `updatedInput`) are not enforced; see the Codex hooks docs. `tool_input` and `tool_response` stay `unknown` because their shape depends on the tool.
 - Types: `ClaudeHookInput`, `ClaudeHookInputFor<'Stop'>`, `ClaudeHookOutput`, `CodexHookInput`, `CodexHookInputFor<'Stop'>`, `CodexHookOutputFor<'Stop'>`, and the event name unions.
 
