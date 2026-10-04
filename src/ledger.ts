@@ -136,10 +136,31 @@ export async function readLedger(path: string, migration: LedgerMigration): Prom
  * world-readable inode until a later `chmod`, and a crash in between would leave
  * them there.
  */
+/**
+ * Writes in progress, by path. Overlapping writes to one ledger run one after
+ * another: on Windows, renaming onto a file another in-flight rename holds open
+ * fails with EPERM, and serializing also makes the last write win.
+ */
+const pendingWrites = new Map<string, Promise<void>>();
+
 export async function writeLedger(path: string, ledger: Ledger): Promise<void> {
+  const previous = pendingWrites.get(path) ?? Promise.resolve();
+  const write = previous.then(
+    () => replaceLedger(path, ledger),
+    () => replaceLedger(path, ledger),
+  );
+  pendingWrites.set(path, write);
+  try {
+    await write;
+  } finally {
+    if (pendingWrites.get(path) === write) pendingWrites.delete(path);
+  }
+}
+
+async function replaceLedger(path: string, ledger: Ledger): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
-  // Unique per write, so overlapping writes (or a stale file from a crashed run
-  // with the same PID) never share a temporary file.
+  // Unique per write, so a stale file from a crashed run with the same PID
+  // never collides with this one.
   const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`;
   try {
     await writeFile(temporary, `${JSON.stringify(ledger, undefined, 2)}\n`, {

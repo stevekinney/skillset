@@ -154,12 +154,38 @@ describe('a failed ledger write', () => {
 describe('overlapping ledger writes', () => {
   it('each use their own temporary file, so neither fails and nothing is left behind', async () => {
     const path = await makePath();
+    const item = {
+      kind: 'skill' as const,
+      name: 'demo',
+      scope: 'user' as const,
+      target: 'claude' as const,
+      hash: 'sha256:x',
+      syncedAt: 't',
+    };
     const first = { version: 2 as const, items: {} };
-    const second = { version: 2 as const, items: {} };
+    const second = { version: 2 as const, items: { demo: item } };
     await Promise.all([writeLedger(path, first), writeLedger(path, second)]);
 
     const entries = await readdir(dirname(path));
     expect(entries).toEqual(['state.json']);
-    expect(JSON.parse(await readFile(path, 'utf8'))).toEqual({ version: 2, items: {} });
+    // Serialized, so the later write wins.
+    expect(JSON.parse(await readFile(path, 'utf8'))).toEqual(second);
+  });
+});
+
+describe('a failed write in a queue of writes', () => {
+  it('does not block the write queued behind it', async () => {
+    const path = await makePath();
+    // JSON.stringify throws on a BigInt, so the first write fails.
+    const unserializable = { version: 2 as const, items: {}, broken: 1n };
+    const valid = { version: 2 as const, items: {} };
+    const [first, second] = await Promise.allSettled([
+      writeLedger(path, unserializable),
+      writeLedger(path, valid),
+    ]);
+
+    expect(first.status).toBe('rejected');
+    expect(second.status).toBe('fulfilled');
+    expect(JSON.parse(await readFile(path, 'utf8'))).toEqual(valid);
   });
 });
