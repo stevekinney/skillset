@@ -121,3 +121,33 @@ model = "nested"
     expect(spliceTomlScalar(scalarConfig, 'missing', undefined)).toBe(scalarConfig);
   });
 });
+
+const crlf = (lines: string[]) => `${lines.join('\r\n')}\r\n`;
+
+describe('CRLF config files', () => {
+  it('recognizes a commented header, so the section is replaced, not duplicated', () => {
+    const contents = crlf(['[mcp_servers.x] # mine', 'command = "a"', '', '[other]', 'key = 1']);
+    const output = spliceTomlSection(contents, 'mcp_servers.x', '[mcp_servers.x]\ncommand = "b"\n');
+    expect(output.match(/\[mcp_servers\.x\]/g)).toHaveLength(1);
+    expect(output).toContain('command = "b"');
+    expect(output).not.toContain('command = "a"');
+  });
+
+  it('stops top-level scalar edits at a commented header', () => {
+    const contents = crlf(['[profiles.work] # mine', 'model = "inside"']);
+    const output = spliceTomlScalar(contents, 'model', '"top"');
+    expect(output).toContain('model = "inside"');
+    expect(output.indexOf('model = "top"')).toBeLessThan(output.indexOf('[profiles.work]'));
+  });
+
+  it('writes new lines with the file’s own CRLF line endings', () => {
+    const contents = crlf(['model = "a"', '[mcp_servers.x]', 'command = "a"']);
+    const section = spliceTomlSection(
+      contents,
+      'mcp_servers.y',
+      '[mcp_servers.y]\ncommand = "b"\n',
+    );
+    const scalar = spliceTomlScalar(section, 'model_verbosity', '"low"');
+    expect(scalar.replaceAll('\r\n', '')).not.toContain('\n');
+  });
+});

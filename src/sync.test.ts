@@ -117,6 +117,28 @@ describe('planSync', () => {
     expect(actions[4]?.path).toBe(join(targets.codex.agents, 'reviewer.toml'));
   });
 
+  it('never deletes a hand-installed target whose name differs only in case', async () => {
+    const targets = await makeTargets();
+    const handSkill = join(targets.claude.skills, 'Demo');
+    await mkdir(handSkill, { recursive: true });
+    await writeFile(join(handSkill, 'SKILL.md'), 'hand-written skill');
+    await writeFile(join(handSkill, 'notes.txt'), 'my notes');
+    await mkdir(targets.claude.agents, { recursive: true });
+    const handAgent = join(targets.claude.agents, 'Reviewer.md');
+    await writeFile(handAgent, 'hand-written agent');
+
+    const sources = await makeSources();
+    const ledger = freshLedger();
+    const actions = await planSync(sources, targets, ledger, { ...options, targets: ['claude'] });
+    await executeSync(sources, actions, ledger, 'user');
+
+    // A case-insensitive file system (macOS, Windows) must skip the hand-installed
+    // folder and file; a case-sensitive one (Linux) writes separate lowercase ones.
+    expect(await readFile(join(handSkill, 'notes.txt'), 'utf8')).toBe('my notes');
+    expect(await readFile(join(handSkill, 'SKILL.md'), 'utf8')).toBe('hand-written skill');
+    expect(await readFile(handAgent, 'utf8')).toBe('hand-written agent');
+  });
+
   it('skips unmanaged targets and recognizes both marker forms', async () => {
     const targets = await makeTargets();
     await mkdir(join(targets.claude.skills, 'demo'), { recursive: true });
