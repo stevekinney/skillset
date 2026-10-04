@@ -65,6 +65,14 @@ function contentBlocks(record: Record<string, unknown>): unknown[] {
 }
 
 /** Compare an inline script with the verdict in the tool result that answers it. */
+/** The runtime's verdict on a launch: accepted, rejected, or none (a tool error). */
+function runtimeVerdict(block: Record<string, unknown>): 'accepted' | 'rejected' | undefined {
+  if (block['is_error'] !== true) return 'accepted';
+  // A denied, interrupted, or otherwise failed call never reached the runtime's
+  // script checks, so it says nothing about whether the script was valid.
+  return runtimeRejected(JSON.stringify(block['content'])) ? 'rejected' : undefined;
+}
+
 function checkVerdict(record: Record<string, unknown>, pending: Map<string, Pending>) {
   for (const block of contentBlocks(record)) {
     if (!isObject(block) || block['type'] !== 'tool_result') continue;
@@ -72,7 +80,12 @@ function checkVerdict(record: Record<string, unknown>, pending: Map<string, Pend
     const entry = pending.get(id);
     if (!entry) continue;
     pending.delete(id);
-    const refused = block['is_error'] === true && runtimeRejected(JSON.stringify(block['content']));
+    const verdict = runtimeVerdict(block);
+    if (verdict === undefined) {
+      count('inline scripts with no runtime verdict (tool error)');
+      continue;
+    }
+    const refused = verdict === 'rejected';
     if (refused === entry.rejected)
       count(refused ? 'inline scripts both reject' : 'inline scripts both accept');
     else

@@ -43,12 +43,26 @@ async function workflowDirectories(root: string, depth = 0): Promise<string[]> {
   return found;
 }
 
+async function nestedTranscripts(directory: string): Promise<string[]> {
+  const transcripts: string[] = [];
+  for (const entry of await children(directory)) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) transcripts.push(...(await nestedTranscripts(path)));
+    else if (entry.name.endsWith('.jsonl') && entry.name !== 'journal.jsonl')
+      transcripts.push(path);
+  }
+  return transcripts;
+}
+
 async function scanSessions(found: Discovered, directories: Map<string, boolean>) {
   const projects = join(claudeDirectory, 'projects');
   for (const project of await children(projects))
     for (const session of await children(join(projects, project.name))) {
       const path = join(projects, project.name, session.name);
       if (session.isFile() && session.name.endsWith('.jsonl')) found.transcripts.push(path);
+      // Subagents' and workflow agents' transcripts live below the session
+      // directory; their Workflow calls count too. Journals are a different format.
+      if (session.isDirectory()) found.transcripts.push(...(await nestedTranscripts(path)));
       directories.set(join(path, 'workflows', 'scripts'), true);
       for (const entry of await children(join(path, 'workflows')))
         if (/^wf_.*\.json$/.test(entry.name))

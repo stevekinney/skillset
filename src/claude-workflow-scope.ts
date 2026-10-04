@@ -46,8 +46,36 @@ function blockNames(statements: (WorkflowNode | null)[]): string[] {
   });
 }
 
+const functionTypes = new Set([
+  'FunctionDeclaration',
+  'FunctionExpression',
+  'ArrowFunctionExpression',
+]);
+
+/**
+ * `var` names declared anywhere inside `node`, not inside a nested function:
+ * JavaScript hoists them to the enclosing function (or the program), so a `var`
+ * in an `if` or loop still binds the name for the whole function.
+ */
+function hoistedVarNames(node: WorkflowNode): string[] {
+  const names: string[] = [];
+  forEachChild(node, (child) => {
+    if (functionTypes.has(child.type)) return;
+    if (child.type === 'VariableDeclaration' && child['kind'] === 'var') {
+      names.push(...declarationNames(child));
+    }
+    names.push(...hoistedVarNames(child));
+  });
+  return names;
+}
+
 function functionNames(node: WorkflowNode): string[] {
-  const parameters = childNodes(node, 'params').flatMap((parameter) => patternNames(parameter));
+  const body = childNode(node, 'body');
+  const hoisted = body ? hoistedVarNames(body) : [];
+  const parameters = [
+    ...childNodes(node, 'params').flatMap((parameter) => patternNames(parameter)),
+    ...hoisted,
+  ];
   // A named function expression binds its own name inside itself.
   const ownName =
     node.type === 'FunctionExpression' ? [identifierName(childNode(node, 'id')) ?? ''] : [];
@@ -55,11 +83,12 @@ function functionNames(node: WorkflowNode): string[] {
 }
 
 const blockScope = (node: WorkflowNode) => blockNames(childNodes(node, 'body'));
+const programScope = (node: WorkflowNode) => [...blockScope(node), ...hoistedVarNames(node)];
 const loopScope = (key: string) => (node: WorkflowNode) => declarationNames(childNode(node, key));
 
 /** How each scope-creating node type binds names for everything inside it. */
 const scopeRules: Record<string, (node: WorkflowNode) => string[]> = {
-  Program: blockScope,
+  Program: programScope,
   BlockStatement: blockScope,
   StaticBlock: blockScope,
   FunctionDeclaration: functionNames,
@@ -130,67 +159,73 @@ function forEachChild(node: WorkflowNode, visit: (child: WorkflowNode) => void):
   }
 }
 
-/** The identifier at the root of a member chain: `options` in `options.schema.type`. */
-function memberRoot(node: WorkflowNode | undefined): string | undefined {
-  let current = node;
-  while (current?.type === 'MemberExpression') current = childNode(current, 'object');
-  return current?.type === 'Identifier' ? identifierName(current) : undefined;
-}
-
-const objectMutators = new Set(['assign', 'defineProperty', 'defineProperties', 'setPrototypeOf']);
-
-/** Mutations through a member chain: `x.a = 1`, `x.a++`, `delete x.a`. */
-const memberMutations: Record<string, (node: WorkflowNode) => WorkflowNode | undefined> = {
-  AssignmentExpression: (node) => childNode(node, 'left'),
-  UpdateExpression: (node) => childNode(node, 'argument'),
-  UnaryExpression: (node) =>
-    node['operator'] === 'delete' ? childNode(node, 'argument') : undefined,
-};
-
-function isObjectMutator(callee: WorkflowNode | undefined): boolean {
-  return (
-    callee?.type === 'MemberExpression' &&
-    identifierName(childNode(callee, 'object')) === 'Object' &&
-    objectMutators.has(identifierName(childNode(callee, 'property')) ?? '')
-  );
+/** Whether an identifier in this position names a binding rather than a value. */
+function isNonReference(parent: WorkflowNode, key: string): boolean {
+  if (parent.type === 'VariableDeclarator' && key === 'id') return true;
+  if ((parent.type === 'Property' || parent.type === 'MemberExpression') && !parent['computed']) {
+    return key === 'key' || key === 'property';
+  }
+  return false;
 }
 
 /**
- * Names a call may mutate: `Object.assign(target, ...)` and friends mutate their
- * first argument, and any function other than `safeCallees` may mutate whatever
- * object it is handed.
+ * Whether a child stays inside a literal handed to a safe callee: the values of
+ * an object literal, the elements of an array literal, and a spread's argument
+ * do; anything else (a call, a member access, an operator) leaves it.
  */
-function callMutationTargets(node: WorkflowNode, safeCallees: ReadonlySet<string>): string[] {
-  const callee = childNode(node, 'callee');
-  if (safeCallees.has(identifierName(callee) ?? '')) return [];
-  const passed = childNodes(node, 'arguments').map((argument) =>
-    argument?.type === 'Identifier' ? (identifierName(argument) ?? '') : '',
-  );
-  return isObjectMutator(callee) ? passed.slice(0, 1) : passed;
-}
-
-/** The names a node may mutate through, if it is a mutation at all. */
-function mutationTargets(node: WorkflowNode, safeCallees: ReadonlySet<string>): string[] {
-  if (node.type === 'CallExpression') return callMutationTargets(node, safeCallees);
-  const target = memberMutations[node.type]?.(node);
-  return target ? [memberRoot(target) ?? ''] : [];
+function staysInLiteral(node: WorkflowNode, key: string): boolean {
+  if (node.type === 'ObjectExpression') return key === 'properties';
+  if (node.type === 'Property') return key === 'value' && !node['computed'];
+  if (node.type === 'ArrayExpression') return key === 'elements';
+  return node.type === 'SpreadElement' && key === 'argument';
 }
 
 /**
- * Names whose object the script may change after binding it: a property
- * assignment, update, or `delete` through it (at any depth), an `Object.assign`
- * style call on it, or handing it to a function other than `safeCallees`. A
- * `const` freezes the binding, not the object, so these can't be read statically.
+ * Names referenced anywhere except inside a literal passed straight to one of
+ * `safeCallees` (`agent('x', { schema: SCHEMA })`, or `...NAME`, which copies).
+ * Any other reference (an alias, a property read or write, handing it to
+ * another function) can let the script change the object a constant holds,
+ * which a `const` binding doesn't prevent, so those constants can't be read
+ * statically.
  */
-export function possiblyMutatedNames(
+/** Whether this identifier is a value reference that lets the object escape. */
+function escapes(node: WorkflowNode, parent: WorkflowNode | undefined, key: string): boolean {
+  if (node.type !== 'Identifier' || !parent || isNonReference(parent, key)) return false;
+  return !(parent.type === 'CallExpression' && key === 'callee');
+}
+
+/** Whether the children under `key` sit inside a literal handed to a safe callee. */
+function childInSafeLiteral(
+  node: WorkflowNode,
+  key: string,
+  inSafeLiteral: boolean,
+  safeCallees: ReadonlySet<string>,
+): boolean {
+  if (node.type === 'CallExpression' && key === 'arguments') {
+    return safeCallees.has(identifierName(childNode(node, 'callee')) ?? '');
+  }
+  return inSafeLiteral && staysInLiteral(node, key);
+}
+
+export function escapingNames(
   program: WorkflowNode,
   safeCallees: ReadonlySet<string>,
 ): Set<string> {
-  const mutated = new Set<string>();
-  const walk = (node: WorkflowNode): void => {
-    for (const name of mutationTargets(node, safeCallees)) if (name !== '') mutated.add(name);
-    forEachChild(node, walk);
+  const escaping = new Set<string>();
+  const walk = (
+    node: WorkflowNode,
+    parent: WorkflowNode | undefined,
+    key: string,
+    inSafeLiteral: boolean,
+  ): void => {
+    if (!inSafeLiteral && escapes(node, parent, key)) escaping.add(identifierName(node) ?? '');
+    for (const [childKey, value] of Object.entries(node)) {
+      const childSafe = childInSafeLiteral(node, childKey, inSafeLiteral, safeCallees);
+      for (const item of Array.isArray(value) ? value : [value]) {
+        if (isNode(item)) walk(item, node, childKey, childSafe);
+      }
+    }
   };
-  walk(program);
-  return mutated;
+  walk(program, undefined, '', false);
+  return escaping;
 }

@@ -263,3 +263,43 @@ describe('every way a script can change an object constant', () => {
     expect(result.agentsWithoutLiteralOptions).toBe(5);
   });
 });
+
+describe('var bindings hoisted to their function', () => {
+  it('treats a var declared anywhere in a function as shadowing the global there', () => {
+    const result = extractClaudeWorkflowCalls(
+      [
+        "function run() { if (false) { var agent } agent('x', { effort: 'bogus' }) }",
+        "for (;;) { var phase; break } phase('Hoisted')",
+        "agent('real', { phase: 'Real' })",
+      ].join('\n'),
+    );
+    if (!result.ok) throw new Error('expected the script to parse');
+    expect(result.agents.map((agent) => agent.options)).toEqual([{ phase: 'Real' }]);
+    expect(result.phases.map((phase) => phase.title)).toEqual(['Real']);
+  });
+});
+
+describe('object constants reached any other way', () => {
+  it('stops resolving a constant once it is aliased or read through', () => {
+    const result = extractClaudeWorkflowCalls(
+      [
+        "const ALIASED = { effort: 'bogus' }",
+        'const ALIAS = ALIASED',
+        "ALIAS.effort = 'low'",
+        "const READ = { effort: 'low' }",
+        'log(READ.effort)',
+        "const SPREAD = { effort: 'low' }",
+        "agent('a', ALIASED)",
+        "agent('b', READ)",
+        "agent('c', { ...SPREAD, label: 'kept' })",
+        "agent('d', SPREAD)",
+      ].join('\n'),
+    );
+    if (!result.ok) throw new Error('expected the script to parse');
+    expect(result.agentsWithoutLiteralOptions).toBe(2);
+    expect(result.agents.map((agent) => agent.options)).toEqual([
+      { effort: 'low', label: 'kept' },
+      { effort: 'low' },
+    ]);
+  });
+});

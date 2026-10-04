@@ -9,7 +9,7 @@ import {
   type WorkflowIdentifierResolver,
   type WorkflowNode,
 } from './claude-workflow-ast.js';
-import { possiblyMutatedNames, walkWorkflowGlobalCalls } from './claude-workflow-scope.js';
+import { escapingNames, walkWorkflowGlobalCalls } from './claude-workflow-scope.js';
 
 /**
  * Finds the calls a workflow script makes to its globals, and evaluates each
@@ -51,10 +51,35 @@ export type ClaudeWorkflowCalls =
   | { ok: false; error: string; line?: number; column?: number };
 
 /** Evaluate an options object property by property, so one computed value costs only itself. */
+function isComposite(node: WorkflowNode): boolean {
+  return node.type === 'ObjectExpression' || node.type === 'ArrayExpression';
+}
+
+/** The object a spread copies, when it is a literal or a constant holding one. */
+function spreadSource(
+  property: WorkflowNode | null,
+  resolve: WorkflowIdentifierResolver,
+): WorkflowNode | undefined {
+  if (property?.type !== 'SpreadElement') return undefined;
+  const argument = childNode(property, 'argument');
+  const source =
+    argument?.type === 'Identifier' ? resolve(identifierName(argument) ?? '') : argument;
+  return source?.type === 'ObjectExpression' ? source : undefined;
+}
+
 function evaluateOptions(node: WorkflowNode, resolve: WorkflowIdentifierResolver) {
   let options: Record<string, unknown> = {};
   let unresolvedProperties = 0;
   for (const property of childNodes(node, 'properties')) {
+    const spread = spreadSource(property, resolve);
+    if (spread) {
+      // A known object spreads its own known keys over the ones before it.
+      const copied = evaluateOptions(spread, resolve);
+      options =
+        copied.unresolvedProperties > 0 ? copied.options : { ...options, ...copied.options };
+      unresolvedProperties += copied.unresolvedProperties;
+      continue;
+    }
     const value = property ? childNode(property, 'value') : undefined;
     const name = property?.type === 'Property' ? optionPropertyName(property) : undefined;
     if (name === undefined || !value) {
@@ -163,7 +188,13 @@ export function extractClaudeWorkflowCalls(source: string): ClaudeWorkflowCalls 
   }
 
   const constants = topLevelConstants(parsed.program);
-  const mutated = possiblyMutatedNames(parsed.program, workflowCallGlobals);
+  // An object or array constant is only knowable when nothing else can reach it.
+  const escaping = escapingNames(parsed.program, workflowCallGlobals);
+  const unknowable = new Set(
+    [...constants]
+      .filter(([name, init]) => escaping.has(name) && isComposite(init))
+      .map(([name]) => name),
+  );
   const found: Found = {
     ok: true,
     agents: [],
@@ -176,7 +207,7 @@ export function extractClaudeWorkflowCalls(source: string): ClaudeWorkflowCalls 
     // A top-level constant resolves only where no local binding hides it and the
     // script never changes the object it holds.
     const resolve: WorkflowIdentifierResolver = (name) =>
-      localNames.has(name) || mutated.has(name) ? undefined : constants.get(name);
+      localNames.has(name) || unknowable.has(name) ? undefined : constants.get(name);
     recordCall(found, call, resolve);
   });
   return found;
