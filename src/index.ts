@@ -50,7 +50,8 @@ export {
   type CodexHookOutputFor,
 } from './codex-hook-payloads.js';
 export { defaultDependencies, runCli, type CliDependencies } from './cli.js';
-export { runDoctorTargets, runImport, runSync, type RunContext } from './commands-run.js';
+export { runDoctorTargets, runImport, runSync } from './commands-run.js';
+export { createRunContext, type RunContext } from './run-context.js';
 export {
   getField,
   listEntries,
@@ -172,7 +173,13 @@ export {
   type SyncAction,
   type SyncOptions,
 } from './sync.js';
-export { resolveTargets, type Scope, type Targets, type ToolTargets } from './targets.js';
+export {
+  resolveTargets,
+  type ConfigDirectoryOverrides,
+  type Scope,
+  type Targets,
+  type ToolTargets,
+} from './targets.js';
 export { renderConditionals, type RenderResult, type TemplateError } from './template.js';
 export { spliceTomlScalar, spliceTomlSection } from './toml-splice.js';
 export {

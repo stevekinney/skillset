@@ -6,7 +6,8 @@ import { z } from 'zod';
 import packageDefinition from '../package.json' with { type: 'json' };
 import { analysisHasErrors, analysisReport, analyzeSources } from './analysis.js';
 import type { CliDependencies } from './cli.js';
-import { runImport, runSync, targetStatuses, type RunContext } from './commands-run.js';
+import { runImport, runSync, targetStatuses } from './commands-run.js';
+import { createRunContext, type RunContext } from './run-context.js';
 import {
   getField,
   listEntries,
@@ -16,7 +17,6 @@ import {
   showSource,
 } from './commands.js';
 import { resolveSourceRoot } from './discover.js';
-import { parseEnvironment } from './environment.js';
 import type { Invocation } from './invocation.js';
 
 type ToolResult = {
@@ -68,16 +68,7 @@ function baseInvocation(overrides: Partial<Invocation>): Invocation {
 export function createMcpServer(dependencies: CliDependencies): McpServer {
   const server = new McpServer({ name: 'skillset', version: packageDefinition.version });
 
-  const context = (): RunContext => {
-    const skillsetDirectory = parseEnvironment(dependencies.env).SKILLSET_DIRECTORY;
-
-    return {
-      cwd: dependencies.cwd,
-      homeDirectory: dependencies.homeDirectory,
-      ...(skillsetDirectory === undefined ? {} : { skillsetDirectory }),
-      log: dependencies.log,
-    };
-  };
+  const context = (): RunContext => createRunContext(dependencies);
   const analyze = async () => analyzeSources(context().skillsetDirectory, dependencies.cwd);
   const sourceRoot = (): string => resolveSourceRoot(context().skillsetDirectory, dependencies.cwd);
 

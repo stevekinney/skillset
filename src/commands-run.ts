@@ -12,21 +12,23 @@ import { readLedger, writeLedger, type Ledger, type LedgerItem } from './ledger.
 import { executeMcpApply, planMcpApply } from './mcp-apply.js';
 import { renderEmbeddedAction, renderSyncAction } from './render.js';
 import { executeSync, planSync, type SyncAction } from './sync.js';
+import type { RunContext } from './run-context.js';
 import { resolveTargets, type Targets } from './targets.js';
 
 /** What the command runners need from the outside world. */
-export type RunContext = {
-  cwd: string;
-  homeDirectory: string;
-  skillsetDirectory?: string | undefined;
-  log: (line: string) => void;
-};
-
 function contextTargets(invocation: Invocation, context: RunContext): Targets {
-  return resolveTargets(invocation.scope, context.homeDirectory, context.cwd);
+  return resolveTargets(
+    invocation.scope,
+    context.homeDirectory,
+    context.cwd,
+    context.configDirectories,
+  );
 }
 
 async function contextLedger(context: RunContext, targets: Targets): Promise<Ledger> {
+  // These paths only migrate a v1 ledger, written before skillset honored
+  // CLAUDE_CONFIG_DIR or CODEX_HOME, so they are the default locations. Passing
+  // the overrides would also make every project-scope command validate them.
   const userTargets = resolveTargets('user', context.homeDirectory, context.cwd);
 
   return readLedger(targets.ledgerFile, {
@@ -222,7 +224,12 @@ export async function targetStatuses(
   scope: Invocation['scope'],
   context: RunContext,
 ): Promise<TargetStatusRow[]> {
-  const targets = resolveTargets(scope, context.homeDirectory, context.cwd);
+  const targets = resolveTargets(
+    scope,
+    context.homeDirectory,
+    context.cwd,
+    context.configDirectories,
+  );
   const ledger = await contextLedger(context, targets);
 
   const rows: TargetStatusRow[] = [];

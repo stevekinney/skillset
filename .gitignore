@@ -57,3 +57,6 @@ local.env
 .env.local
 .env.*.local
 *.bun-build
+
+# Agent worktrees nested inside the checkout: separate checkouts, never committed.
+.claude/worktrees/

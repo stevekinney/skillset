@@ -9,7 +9,8 @@ import {
   analyzeSources,
   type Analysis,
 } from './analysis.js';
-import { runDoctorTargets, runImport, runSync, type RunContext } from './commands-run.js';
+import { runDoctorTargets, runImport, runSync } from './commands-run.js';
+import { createRunContext, type RunContext } from './run-context.js';
 import {
   getField,
   listEntries,
@@ -21,7 +22,6 @@ import {
   type SourceKind,
 } from './commands.js';
 import { resolveSourceRoot } from './discover.js';
-import { parseEnvironment } from './environment.js';
 import { USAGE } from './help.js';
 import { parseInvocation, type Invocation } from './invocation.js';
 import { runMcpServer } from './mcp-server.js';
@@ -55,14 +55,7 @@ function describeError(cause: unknown): string {
 }
 
 function runContext(dependencies: CliDependencies): RunContext {
-  const skillsetDirectory = parseEnvironment(dependencies.env).SKILLSET_DIRECTORY;
-
-  return {
-    cwd: dependencies.cwd,
-    homeDirectory: dependencies.homeDirectory,
-    ...(skillsetDirectory === undefined ? {} : { skillsetDirectory }),
-    log: dependencies.log,
-  };
+  return createRunContext(dependencies);
 }
 
 function renderAnalysis(analysis: Analysis, json: boolean, log: (line: string) => void): void {

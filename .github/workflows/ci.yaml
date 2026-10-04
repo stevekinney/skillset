@@ -54,8 +54,14 @@ jobs:
       - name: Smoke-test Node CLI build
         run: node ./dist/node/bin.js --help
 
-      # Releases ship standalone binaries for every OS; build and run one natively.
+      # Releases ship standalone binaries for every OS; build and run one natively,
+      # with the same flags. A project's .env must not reach the binary: with a
+      # relative CLAUDE_CONFIG_DIR loaded from it, the dry run would fail.
       - name: Smoke-test compiled binary
         run: |
-          bun build ./src/bin.ts --compile --outfile smoke/skillset
+          bun build ./src/bin.ts --compile --no-compile-autoload-dotenv --no-compile-autoload-bunfig --outfile smoke/skillset
           ./smoke/skillset --help
+          mkdir -p smoke/project/skills/demo smoke/home
+          printf -- '---\nname: demo\ndescription: A demo.\n---\n\nBody.\n' > smoke/project/skills/demo/SKILL.md
+          printf 'CLAUDE_CONFIG_DIR=relative-config\n' > smoke/project/.env
+          cd smoke/project && HOME="$PWD/../home" USERPROFILE="$PWD/../home" ../skillset sync --dry-run
