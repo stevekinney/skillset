@@ -30,7 +30,7 @@ const CLOSED_SET_LIMIT = 25;
 const PRINT_LIMIT = 12;
 /** Field names whose values are identifiers, text or paths: never printed, however few. */
 const PRIVATE_NAME =
-  /(id|uuid|path|cwd|branch|slug|name|title|text|content|prompt|message|command|url|email|summary|description|label|key|hash|pid|commit|sha|date|timestamp|chain|from|session|repository)$/i;
+  /(id|uuid|path|cwd|branch|slug|name|title|text|content|prompt|message|command|url|email|summary|description|label|key|hash|pid|commit|sha|date|timestamp|chain|from|session|repository|agent(type|setting)|agent_type|server|skill|style)$/i;
 /** A field is a closed-set candidate only when its values repeat: this many records per distinct value. */
 const REPEAT_FACTOR = 4;
 

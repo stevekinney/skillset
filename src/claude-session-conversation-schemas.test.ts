@@ -70,6 +70,7 @@ describe('user records', () => {
     observer: { from: 'f', senderTaskId: 't' },
     'auto-continuation': {},
     'observer-activity': {},
+    'slack-ping': {},
   };
 
   for (const [kind, fields] of Object.entries(origins)) {

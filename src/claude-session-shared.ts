@@ -188,4 +188,6 @@ export const messageOrigin = z.discriminatedUnion('kind', [
   z.looseObject({ kind: z.literal('observer'), from: z.string(), senderTaskId: z.string() }),
   z.looseObject({ kind: z.literal('auto-continuation') }),
   z.looseObject({ kind: z.literal('observer-activity') }),
+  // Named in the binary's origin switch; no shape is published for it.
+  z.looseObject({ kind: z.literal('slack-ping') }),
 ]);

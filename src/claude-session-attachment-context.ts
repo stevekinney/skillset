@@ -41,6 +41,12 @@ const environmentChange = z.looseObject({
 
 const diagnosticPosition = z.looseObject({ line: z.number(), character: z.number() });
 
+/**
+ * Where a loaded memory file came from. `User`, `Project` and `AutoMem` appear
+ * in real sessions and `Managed` in the binary's loader; `Local`
+ * (`CLAUDE.local.md`) and `TeamMem` are taken from Claude Code's memory-type
+ * list and not confirmed against this machine's data or the binary.
+ */
 const memoryFileTypes = ['Managed', 'User', 'Project', 'Local', 'AutoMem', 'TeamMem'] as const;
 
 const instructionFile = z.looseObject({

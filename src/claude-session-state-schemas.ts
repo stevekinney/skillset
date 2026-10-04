@@ -67,6 +67,8 @@ export const claudeSessionStateRecordSchemas = {
     lastPrompt: z.string().optional(),
     leafUuid: z.string(),
   }),
+  // `normal` is the only value in real sessions; `coordinator` is the other session mode Claude
+  // Code has, but its exact spelling here is not confirmed against the binary.
   mode: sessionRecord('mode', { ...sessionId, mode: z.enum(['normal', 'coordinator']) }),
   'permission-mode': sessionRecord('permission-mode', {
     ...sessionId,
