@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'bun:test';
-import { chmod, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import {
   embeddedKey,
@@ -124,5 +124,29 @@ describe('ledger file permissions', () => {
     await writeLedger(path, { version: 2, items: {} });
     const rewritten = await stat(path);
     if (posix) expect(rewritten.mode & 0o777).toBe(0o600);
+    // Replaced, not rewritten in place: the readable inode never holds the new
+    // secrets, and an already-open descriptor can't see them.
+    const before = await stat(path);
+    await writeLedger(path, { version: 2, items: {} });
+    const after = await stat(path);
+    if (posix) expect(after.ino).not.toBe(before.ino);
+    const leftovers = await readdir(dirname(path));
+    expect(leftovers).toEqual(['state.json']);
+  });
+});
+
+describe('a failed ledger write', () => {
+  it('surfaces the error and leaves no temporary file behind', async () => {
+    const path = await makePath();
+    // A non-empty directory where the ledger belongs makes the final rename fail.
+    await mkdir(join(path, 'occupied'), { recursive: true });
+
+    const failure = await writeLedger(path, { version: 2, items: {} }).then(
+      () => undefined,
+      (cause: unknown) => cause,
+    );
+    expect(failure).toBeInstanceOf(Error);
+    const entries = await readdir(dirname(path));
+    expect(entries).toEqual(['state.json']);
   });
 });
