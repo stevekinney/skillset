@@ -26,12 +26,10 @@ function contextTargets(invocation: Invocation, context: RunContext): Targets {
 }
 
 async function contextLedger(context: RunContext, targets: Targets): Promise<Ledger> {
-  const userTargets = resolveTargets(
-    'user',
-    context.homeDirectory,
-    context.cwd,
-    context.configDirectories,
-  );
+  // These paths only migrate a v1 ledger, written before skillset honored
+  // CLAUDE_CONFIG_DIR or CODEX_HOME, so they are the default locations. Passing
+  // the overrides would also make every project-scope command validate them.
+  const userTargets = resolveTargets('user', context.homeDirectory, context.cwd);
 
   return readLedger(targets.ledgerFile, {
     claudeMcpConfig: userTargets.claude.mcpConfig,

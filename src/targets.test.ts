@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'bun:test';
-import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { afterEach, describe, expect, it } from 'bun:test';
+import { homedir, tmpdir } from 'node:os';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { join, resolve, sep } from 'node:path';
 
 import { resolveTargets } from './targets.js';
 
@@ -48,7 +49,18 @@ describe('config directory overrides', () => {
   // Overrides resolve against the working directory, which on Windows also adds a
   // drive letter to a root-relative path like `/configuration/claude`.
   const claudeHome = resolve('/repo', '/configuration/claude');
-  const codexHome = resolve('/repo', '/configuration/codex');
+
+  // CODEX_HOME must exist, as Codex requires, so those tests use real directories.
+  const temporaryDirectories: string[] = [];
+  afterEach(() => {
+    for (const directory of temporaryDirectories.splice(0))
+      rmSync(directory, { recursive: true, force: true });
+  });
+  const temporaryDirectory = () => {
+    const directory = realpathSync.native(mkdtempSync(join(tmpdir(), 'skillset-targets-')));
+    temporaryDirectories.push(directory);
+    return directory;
+  };
 
   it('relocates Claude Code’s config home and .claude.json with CLAUDE_CONFIG_DIR', () => {
     const targets = resolveTargets('user', '/home/user', '/repo', {
@@ -65,9 +77,8 @@ describe('config directory overrides', () => {
   });
 
   it('relocates Codex files with CODEX_HOME, but not user skills', () => {
-    const targets = resolveTargets('user', '/home/user', '/repo', {
-      codexHome: '/configuration/codex',
-    });
+    const codexHome = temporaryDirectory();
+    const targets = resolveTargets('user', '/home/user', '/repo', { codexHome });
     expect(targets.codex).toEqual({
       skills: join('/home/user', '.agents', 'skills'),
       agents: join(codexHome, 'agents'),
@@ -83,8 +94,37 @@ describe('config directory overrides', () => {
     expect(
       resolveTargets('user', '/home/user', '/repo', { claudeConfigDirectory: '', codexHome: '' }),
     ).toEqual(plain);
-    const relative = resolveTargets('user', '/home/user', '/repo', { codexHome: 'codex-home' });
-    expect(relative.codex.agents).toBe(join(resolve('/repo', 'codex-home'), 'agents'));
+    const base = temporaryDirectory();
+    mkdirSync(join(base, 'codex-home'));
+    const relative = resolveTargets('user', '/home/user', base, { codexHome: 'codex-home' });
+    expect(relative.codex.agents).toBe(join(base, 'codex-home', 'agents'));
+  });
+
+  it('requires CODEX_HOME to be an existing directory, as Codex does', () => {
+    const base = temporaryDirectory();
+    expect(() =>
+      resolveTargets('user', '/home/user', base, { codexHome: join(base, 'typo') }),
+    ).toThrow('does not exist');
+    writeFileSync(join(base, 'file'), '');
+    expect(() =>
+      resolveTargets('user', '/home/user', base, { codexHome: join(base, 'file') }),
+    ).toThrow('is not a directory');
+  });
+
+  it('resolves CODEX_HOME through the file system, as Codex canonicalizes it', () => {
+    // `link/..` is `real`'s parent on disk, not the directory holding `link`.
+    const base = temporaryDirectory();
+    mkdirSync(join(base, 'outer', 'real'), { recursive: true });
+    symlinkSync(
+      join(base, 'outer', 'real'),
+      join(base, 'link'),
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
+    const targets = resolveTargets('user', '/home/user', base, {
+      // Built by hand: `join` would collapse the `..` before the code saw it.
+      codexHome: `${join(base, 'link')}${sep}..`,
+    });
+    expect(targets.codex.agents).toBe(join(base, 'outer', 'agents'));
   });
 
   it('rejects a relative CLAUDE_CONFIG_DIR, as Claude Code does, at user scope only', () => {
@@ -97,7 +137,7 @@ describe('config directory overrides', () => {
   });
 
   it('leaves project scope and the ledger alone', () => {
-    const overrides = { claudeConfigDirectory: '/c', codexHome: '/x' };
+    const overrides = { claudeConfigDirectory: '/c', codexHome: temporaryDirectory() };
     expect(resolveTargets('project', '/home/user', '/repo', overrides)).toEqual(
       resolveTargets('project', '/home/user', '/repo'),
     );

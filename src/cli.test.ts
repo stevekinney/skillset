@@ -301,6 +301,8 @@ describe('config directory overrides', () => {
     await addAgent(fixture, 'reviewer', validAgent);
     const claudeHome = join(fixture.root, 'claude-config');
     const codexHome = join(fixture.root, 'codex-home');
+    // Codex requires an explicitly set CODEX_HOME to exist already.
+    await mkdir(codexHome);
 
     const code = await runCli(['sync'], {
       ...fixture.dependencies,
@@ -330,5 +332,16 @@ describe('relative CLAUDE_CONFIG_DIR', () => {
     });
     expect(code).toBe(1);
     expect(fixture.lines.join('\n')).toContain('CLAUDE_CONFIG_DIR must be an absolute path');
+  });
+
+  it('does not affect project scope, which ignores the overrides', async () => {
+    const fixture = await makeFixture();
+    await addSkill(fixture, 'demo', validSkill);
+    const code = await runCli(['sync', '--scope', 'project'], {
+      ...fixture.dependencies,
+      env: { NODE_ENV: 'test', CLAUDE_CONFIG_DIR: 'relative-config' },
+    });
+    expect(code).toBe(0);
+    expect(await exists(join(fixture.root, '.claude', 'skills', 'demo', 'SKILL.md'))).toBe(true);
   });
 });

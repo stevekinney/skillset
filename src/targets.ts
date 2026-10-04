@@ -1,5 +1,6 @@
+import { realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { isAbsolute, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, parse, resolve, sep } from 'node:path';
 
 import type { Target } from './frontmatter.js';
 
@@ -49,6 +50,47 @@ function overrideDirectory(
   return value ? resolve(workingDirectory, value) : undefined;
 }
 
+/**
+ * Resolve `path` through the file system one component at a time, so a `..`
+ * applies to the real (symlink-resolved) directory before it, as the OS
+ * `realpath` does. Runtimes differ on whether `realpathSync.native` normalizes
+ * `..` lexically first, so it isn't relied on for that.
+ */
+function physicalPath(path: string, value: string): string {
+  const { root } = parse(path);
+  let current = root;
+  for (const segment of path.slice(root.length).split(/[\\/]+/)) {
+    if (segment === '' || segment === '.') continue;
+    if (segment === '..') {
+      current = dirname(current);
+      continue;
+    }
+    const next = join(current, segment);
+    if (!statSync(next, { throwIfNoEntry: false })) {
+      throw new Error(`CODEX_HOME points to \`${value}\`, which does not exist`);
+    }
+    current = realpathSync(next);
+  }
+
+  return current;
+}
+
+/**
+ * `CODEX_HOME` as Codex resolves it: an explicitly set home must already exist
+ * as a directory, and it is canonicalized through the file system, so a
+ * symlink followed by `..` lands where Codex looks, not where a lexical
+ * `resolve` would.
+ */
+function canonicalCodexHome(value: string, workingDirectory: string): string {
+  const path = isAbsolute(value) ? value : `${workingDirectory}${sep}${value}`;
+  const canonical = physicalPath(path, value);
+  if (!statSync(canonical).isDirectory()) {
+    throw new Error(`CODEX_HOME points to \`${value}\`, which is not a directory`);
+  }
+
+  return canonical;
+}
+
 function userTargets(
   home: string,
   overrides: ConfigDirectoryOverrides,
@@ -64,8 +106,9 @@ function userTargets(
   }
   const claudeOverride = overrideDirectory(overrides.claudeConfigDirectory, workingDirectory);
   const claudeHome = claudeOverride ?? join(home, '.claude');
-  const codexHome =
-    overrideDirectory(overrides.codexHome, workingDirectory) ?? join(home, '.codex');
+  const codexHome = overrides.codexHome
+    ? canonicalCodexHome(overrides.codexHome, workingDirectory)
+    : join(home, '.codex');
 
   return {
     claude: {
