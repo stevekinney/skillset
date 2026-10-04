@@ -1,0 +1,4 @@
+# Check out every text file with LF line endings on every OS. Windows Git
+# defaults to core.autocrlf=true, which turns sources into CRLF: Prettier then
+# reports every file as unformatted, and the Bash hooks in .claude/hooks fail.
+* text=auto eol=lf

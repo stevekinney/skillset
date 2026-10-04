@@ -14,11 +14,18 @@ permissions:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        # Windows and macOS file systems are case-insensitive and Windows checks
+        # files out differently, so behavior differs by OS, not just by Node.
+        os: [ubuntu-latest, macos-latest, windows-latest]
         node-version: ['22', '24']
+    defaults:
+      run:
+        # The same shell on every OS (Git Bash on Windows), so each step reads alike.
+        shell: bash
     steps:
       - uses: actions/checkout@v4
 
@@ -46,3 +53,9 @@ jobs:
 
       - name: Smoke-test Node CLI build
         run: node ./dist/node/bin.js --help
+
+      # Releases ship standalone binaries for every OS; build and run one natively.
+      - name: Smoke-test compiled binary
+        run: |
+          bun build ./src/bin.ts --compile --outfile smoke/skillset
+          ./smoke/skillset --help
