@@ -87,6 +87,9 @@ describe('readLedger', () => {
     ['is from an unknown version', JSON.stringify({ version: 99 })],
     ['is not an object', '[]'],
     ['has malformed items', JSON.stringify({ version: 2, items: { a: 1 } })],
+    // A damaged v2 ledger must not pass for the v1 shape and migrate to empty.
+    ['has lost its version', JSON.stringify({ items: {} })],
+    ['has an unrecognizable v1 shape', JSON.stringify({ claude: 'neon' })],
   ])('refuses a ledger that %s', async (_case, contents) => {
     const path = await makePath();
     await writeFile(path, contents);

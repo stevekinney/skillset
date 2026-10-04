@@ -84,15 +84,20 @@ export type LedgerMigration = {
   codexMcpConfig: string;
 };
 
-function migrateV1(parsed: Record<string, unknown>, migration: LedgerMigration): Ledger {
+/** The v1 MCP state file: the server names skillset wrote, per tool. Nothing else. */
+const v1LedgerSchema = z.strictObject({
+  claude: z.array(z.string()).optional(),
+  codex: z.array(z.string()).optional(),
+});
+
+type V1Ledger = z.infer<typeof v1LedgerSchema>;
+
+function migrateV1(parsed: V1Ledger, migration: LedgerMigration): Ledger {
   const ledger: Ledger = { version: 2, items: {} };
 
   for (const target of ['claude', 'codex'] as const) {
-    const names = parsed[target];
-    if (!Array.isArray(names)) continue;
-
     const configPath = target === 'claude' ? migration.claudeMcpConfig : migration.codexMcpConfig;
-    for (const name of names.filter((candidate) => typeof candidate === 'string')) {
+    for (const name of parsed[target] ?? []) {
       ledger.items[embeddedKey(configPath, 'mcp-server', name)] = {
         kind: 'mcp-server',
         name,
@@ -158,11 +163,14 @@ function parseLedger(raw: string, source: string, migration: LedgerMigration): L
   }
 
   if (isLedger(parsed)) return parsed;
-  if (isMapping(parsed) && parsed['version'] === undefined) return migrateV1(parsed, migration);
+  // Only the exact v1 shape migrates: a damaged v2 ledger that lost its version
+  // would otherwise migrate to an empty one.
+  const v1 = v1LedgerSchema.safeParse(parsed);
+  if (v1.success) return migrateV1(v1.data, migration);
 
   throw unreadableLedger(
     source,
-    isMapping(parsed) && parsed['version'] !== 2
+    isMapping(parsed) && parsed['version'] !== undefined && parsed['version'] !== 2
       ? `has version ${JSON.stringify(parsed['version'])}, which this skillset doesn't know`
       : "isn't in a format skillset recognizes",
   );
