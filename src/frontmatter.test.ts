@@ -5,6 +5,7 @@ import {
   codexFrontmatter,
   openaiConfiguration,
   parseSkillFile,
+  splitFrontmatter,
   serializeFrontmatter,
   serializeOpenaiConfiguration,
 } from './frontmatter.js';
@@ -222,5 +223,13 @@ describe('undocumented Claude Code skill fields', () => {
       hooks: { Stop: [{ hooks: [{ type: 'command', command: 'x', extra: 1 }] }] },
     });
     expect(codexFrontmatter(parsed.frontmatter)).toEqual({ name: 'a', description: 'b' });
+  });
+});
+
+describe('byte-order marks', () => {
+  it('ignore a leading byte-order mark, as Windows editors often write', () => {
+    const { mapping, body } = splitFrontmatter('\uFEFF---\nname: a\ndescription: b\n---\nBody.\n');
+    expect(mapping).toEqual({ name: 'a', description: 'b' });
+    expect(body).toBe('Body.\n');
   });
 });

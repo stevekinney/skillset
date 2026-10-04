@@ -151,3 +151,21 @@ describe('importSource', () => {
     ).rejects.toThrow('missing the required name/description');
   });
 });
+
+describe('importing a codex agent saved with a byte-order mark', () => {
+  it('parses it like any other agent', async () => {
+    const { root, targets } = await makeFixture();
+    await mkdir(targets.codex.agents, { recursive: true });
+    await writeFile(
+      join(targets.codex.agents, 'helper.toml'),
+      '﻿name = "helper"\ndescription = "H."\ndeveloper_instructions = """\nYou help.\n"""\n',
+    );
+
+    const path = await importSource(
+      { kind: 'agent', name: 'helper', from: 'codex' },
+      root,
+      targets,
+    );
+    expect(await readFile(path, 'utf8')).toContain('name: helper');
+  });
+});

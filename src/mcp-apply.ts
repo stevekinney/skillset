@@ -3,6 +3,7 @@ import { dirname } from 'node:path';
 
 import { parse as parseToml, stringify as stringifyToml } from 'smol-toml';
 
+import { withoutByteOrderMark } from './byte-order-mark.js';
 import {
   backupOnce,
   readJsonConfig,
@@ -46,7 +47,7 @@ async function codexServers(path: string): Promise<Record<string, unknown>> {
 
   let parsed: unknown;
   try {
-    parsed = parseToml(raw);
+    parsed = parseToml(withoutByteOrderMark(raw));
   } catch {
     throw new Error(`${path} is not valid TOML — refusing to edit it`);
   }

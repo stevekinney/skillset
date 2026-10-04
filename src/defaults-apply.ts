@@ -3,6 +3,7 @@ import { dirname } from 'node:path';
 
 import { parse as parseToml } from 'smol-toml';
 
+import { withoutByteOrderMark } from './byte-order-mark.js';
 import {
   backupOnce,
   readJsonConfig,
@@ -47,7 +48,7 @@ async function currentValues(target: Target, file: string): Promise<Record<strin
 
   let parsed: unknown;
   try {
-    parsed = parseToml(raw);
+    parsed = parseToml(withoutByteOrderMark(raw));
   } catch {
     throw new Error(`${file} is not valid TOML — refusing to edit it`);
   }

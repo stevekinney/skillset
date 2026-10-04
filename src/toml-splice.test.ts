@@ -151,3 +151,22 @@ describe('CRLF config files', () => {
     expect(scalar.replaceAll('\r\n', '')).not.toContain('\n');
   });
 });
+
+describe('a config.toml that starts with a byte-order mark', () => {
+  // `\s` matches U+FEFF, so a BOM-prefixed first line is still recognized.
+  it('replaces or removes a first-line scalar instead of duplicating it', () => {
+    expect(spliceTomlScalar('﻿model = "old"\n', 'model', '"new"')).toBe('model = "new"\n');
+    expect(spliceTomlScalar('﻿model = "old"\n', 'model', undefined)).toBe('');
+  });
+
+  it('replaces or removes a first-line section instead of duplicating it', () => {
+    const contents = '﻿[mcp_servers.x]\ncommand = "a"\n';
+    const replaced = spliceTomlSection(
+      contents,
+      'mcp_servers.x',
+      '[mcp_servers.x]\ncommand = "b"\n',
+    );
+    expect(replaced.match(/\[mcp_servers\.x\]/g)).toHaveLength(1);
+    expect(spliceTomlSection(contents, 'mcp_servers.x', undefined)).toBe('');
+  });
+});

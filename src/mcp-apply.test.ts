@@ -231,3 +231,15 @@ describe('executeMcpApply', () => {
     );
   });
 });
+
+describe('codex config with a byte-order mark', () => {
+  it('plans against it instead of refusing it as invalid TOML', async () => {
+    const files = await makeFiles();
+    await writeFile(files.codex, '﻿# saved by a Windows editor\nmodel = "gpt-5.6"\n');
+    const actions = await planMcpApply(source, files, freshLedger(), {
+      ...options,
+      targets: ['codex'],
+    });
+    expect(actions.length).toBeGreaterThan(0);
+  });
+});

@@ -150,6 +150,15 @@ describe('itemStatus — embedded kinds', () => {
     expect(await itemStatus(embeddedKey(config, 'hook', item.name), item)).toBe('drift');
   });
 
+  it('reads a config saved with a byte-order mark, instead of reporting it missing', async () => {
+    const root = await makeRoot();
+    const config = join(root, 'settings.json');
+    await writeFile(config, `\uFEFF${JSON.stringify({ model: 'opus' })}`);
+
+    const item = fileItem({ kind: 'default', name: 'model', entry: 'opus' });
+    expect(await itemStatus(embeddedKey(config, 'default', 'model'), item)).toBe('clean');
+  });
+
   it('checks default scalars by equality', async () => {
     const root = await makeRoot();
     const config = join(root, 'settings.json');
