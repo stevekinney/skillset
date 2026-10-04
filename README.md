@@ -131,6 +131,37 @@ Session transcripts (for reading what Claude Code and Codex record):
 - Fields with a closed set of values are literal unions. A few Codex fields can hold values beyond the known list (`reasoning_effort`, for example), so their type keeps the known values for autocomplete and still accepts any other string. Records are loose objects, so a field a newer version adds never fails a parse. The handful of spots modeled as `unknown`, such as a tool's input, are listed with reasons in each module's comment.
 - The schemas were checked against every session file on the development machine: 4,140 Claude Code files (1.1 million records, versions 2.1.221 through 2.1.289) and 10,102 Codex files (4.9 million records). `bun run check:claude-sessions` and `bun run check:codex-sessions` rerun those checks against your own sessions. They report parse failures and fields the schema doesn't model, but never record content.
 
+Workflow scripts (for writing and checking Claude Code [dynamic workflows](https://code.claude.com/docs/en/workflows)):
+
+- A workflow is a JavaScript file that begins with `export const meta = {...}` and orchestrates subagents through the globals `agent`, `pipeline`, `parallel`, `phase`, `log`, `workflow`, `args`, and `budget`. These schemas and helpers describe every structure Claude Code reads or writes for one.
+- `claudeWorkflowMetaSchema` (and `claudeWorkflowPhaseSchema`) validate the evaluated `meta` block. `claudeWorkflowAgentOptionsSchema` validates the second argument of `agent()`: `effort` is `'low' | 'medium' | 'high' | 'xhigh' | 'max'`, `isolation` is `'worktree'`, and `claudeWorkflowOutputSchemaSchema` checks the `schema` option the way the runtime does (an object root with `properties`, and `required` limited to those properties). `claudeWorkflowToolInputSchema` and `claudeWorkflowToolOutputSchema` cover the `Workflow` tool, `claudeWorkflowReferenceSchema` covers the argument of `workflow()`, `claudeWorkflowBudgetSchema` covers `budget`, and `claudeWorkflowRunRecordSchema` covers the `wf_<id>.json` file Claude Code writes when a run ends. A run's `journal.jsonl` stays under `claudeWorkflowJournalRecordSchema`. The runtime's limits are exported as `claudeWorkflowMaximumScriptBytes`, `claudeWorkflowMaximumItems`, `claudeWorkflowMaximumAgents`, and `claudeWorkflowDefaultConcurrency(cpus)`.
+- `parseClaudeWorkflowMeta(source)` reads a script's `meta` from its source text with the same parser (acorn) and rules as Claude Code: it must be the first statement and a pure literal, with no variables, calls, spreads, computed keys, or template interpolation. It returns the validated `meta` and the script body, or an error with a line number. `findClaudeWorkflowForbiddenApis(source)` finds `Date.now`, `Math.random`, and `new Date()` with no arguments, which throw inside a script. `extractClaudeWorkflowCalls(source)` evaluates the options of every `agent()` call written as a literal (or as a top-level `const` holding one), the references passed to `workflow()`, and the titles passed to `phase()`; what depends on a runtime value is counted rather than guessed. `checkClaudeWorkflowPhases(uses, titles)` compares those titles with `meta.phases`.
+- Type guards: `isClaudeWorkflowMeta`, `isClaudeWorkflowAgentOptions`, `isClaudeWorkflowOutputSchema`, `isClaudeWorkflowToolInput`, `isClaudeWorkflowToolOutput`, `isClaudeWorkflowReference`, `isClaudeWorkflowBudget`, and `isClaudeWorkflowRunRecord`.
+- To type-check a script, reference the globals from a JavaScript file and turn on `// @ts-check`. The declarations live in a separate entry point, `@lostgradient/skillset/workflow-globals`, because importing them from the main entry would put `agent` and `pipeline` into every consumer's global scope.
+
+```javascript
+// @ts-check
+/// <reference types="@lostgradient/skillset/workflow-globals" />
+export const meta = { name: 'audit-routes', description: 'Audit every route handler' };
+
+const found = await agent('List every route file.', {
+  schema: {
+    type: 'object',
+    required: ['files'],
+    properties: { files: { type: 'array', items: { type: 'string' } } },
+  },
+});
+// `found` is typed from the schema: `{ files: string[] } | null`.
+const audits = await pipeline(found?.files ?? [], (file) =>
+  agent(`Audit ${file}`, { label: file }),
+);
+```
+
+- `agent(prompt, { schema })` returns the object type the schema literal describes (`type`, `properties`, `required`, `items`, `enum`, `const`, `anyOf`, and `oneOf` are understood; anything else is `unknown`), and `agent(prompt)` returns `string`, both `| null`. `pipeline` is typed through six stages, each receiving the previous stage's result, and `parallel` keeps a tuple's element types. `ClaudeWorkflowScriptGlobals` describes the whole environment, and the individual types (`ClaudeWorkflowAgent`, `ClaudeWorkflowPipeline`, `ClaudeWorkflowSchemaResult`, and the rest) are exported from the main entry.
+- Two things TypeScript cannot be taught: a top-level `return` is valid in a workflow script but reported as an error (TS1108) in a module, so put `// @ts-ignore` above it, and `args` is typed `any`, because its shape comes from whoever launches the workflow. Set `"module": "esnext"`, `"moduleResolution": "bundler"`, and `"allowJs": true` with `"checkJs": true` in a `jsconfig.json` to check scripts without a per-file comment.
+- The schemas and helpers were checked against every workflow on the development machine: 56 executed scripts, 14 helper files that were never run, 264 run records, 302 `Workflow` tool calls and 295 results in 121 session transcripts, and 503 `agent()` option objects. Claude Code's verdict on each of the 52 inline scripts (accepted or rejected) matched the verdict of `parseClaudeWorkflowMeta` and `findClaudeWorkflowForbiddenApis` every time. `bun run check:workflows` reruns the check against your own workflows. It reports counts, schema issue paths, and file:line locations, never script content.
+- `agent()` also reads `disallowedTools`, `bashCommandClamp`, and `stallMs`, which the documented API does not mention; the options schema accepts them but treat them as unstable. `agent({ isolation: 'remote' })` parses but throws in the current build, so the schema rejects it.
+
 Every exported type (`SourceKind`, `Target`, `Scope`, `Invocation`, `Analysis`, `Ledger`, `LedgerItem`, `SyncAction`, `SyncOptions`, `CompilableSkill`/`CompilableAgent`/`CompilableSources`, `SourceSkill`/`SourceAgent`/`SourceFile`/`Sources`, `SkillFrontmatter`/`AgentFrontmatter`, `ParsedSkillFile`/`ParsedAgentFile`, `McpServer`/`ParsedMcpSource`, `HooksSource`, `DefaultsSource`, `Environment`, `ListEntry`/`ShowFile`, `TargetStatus`, `KindFilter`, `UsageOutcome`, `RenderResult`/`TemplateError`, `EmittedFile`, `Targets`/`ToolTargets`, `EmbeddedAction`) ships alongside its function — see `src/index.ts` for the complete, current export list.
 
 ## Skills (`./skills/<name>/SKILL.md`)
