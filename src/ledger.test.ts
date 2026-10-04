@@ -1,5 +1,15 @@
 import { afterEach, describe, expect, it } from 'bun:test';
-import { chmod, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -223,5 +233,32 @@ describe('moving the ledger to a new location', () => {
     const entries = await readdir(dirname(path));
     expect(entries).toEqual(['state.json']);
     expect(JSON.parse(await readFile(path, 'utf8')).items).toEqual({ demo: item });
+  });
+});
+
+describe('when the old and new ledger paths are the same file', () => {
+  it('keeps the ledger instead of deleting it through the other name', async () => {
+    const path = await makePath();
+    // The old location reaches the new file through a symlinked directory.
+    const linkedDirectory = join(dirname(path), 'linked');
+    await symlink(
+      dirname(path),
+      linkedDirectory,
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
+    const legacy = join(linkedDirectory, 'state.json');
+
+    await writeLedger(path, { version: 2, items: {} }, legacy);
+    expect(JSON.parse(await readFile(path, 'utf8'))).toEqual({ version: 2, items: {} });
+  });
+});
+
+describe('a ledger with no old location to retire', () => {
+  it('writes normally when the old path does not exist', async () => {
+    const path = await makePath();
+    const legacy = join(dirname(path), 'never-existed.json');
+    await writeLedger(path, { version: 2, items: {} }, legacy);
+    const entries = await readdir(dirname(path));
+    expect(entries).toEqual(['state.json']);
   });
 });

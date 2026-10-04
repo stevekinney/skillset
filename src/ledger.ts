@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 import type { Target } from './frontmatter.js';
@@ -146,6 +146,13 @@ export async function readLedger(
  * world-readable inode until a later `chmod`, and a crash in between would leave
  * them there.
  */
+/** Whether two paths name the same file on disk, or the second doesn't exist. */
+async function sameFile(path: string, other: string): Promise<boolean> {
+  if (other === path) return true;
+  const [current, previous] = await Promise.all([stat(path), stat(other).catch(() => undefined)]);
+  return previous === undefined || (previous.dev === current.dev && previous.ino === current.ino);
+}
+
 /**
  * Writes in progress, by path. Overlapping writes to one ledger run one after
  * another: on Windows, renaming onto a file another in-flight rename holds open
@@ -169,8 +176,12 @@ export async function writeLedger(
   } finally {
     if (pendingWrites.get(path) === write) pendingWrites.delete(path);
   }
-  // Only after the ledger is safely at its new location is the old one retired.
-  if (legacyPath !== undefined && legacyPath !== path) await rm(legacyPath, { force: true });
+  // Only after the ledger is safely at its new location is the old one retired,
+  // and never when both names reach the same file (a symlinked XDG_CONFIG_HOME,
+  // say): removing it would delete the ledger just written.
+  if (legacyPath !== undefined && !(await sameFile(path, legacyPath))) {
+    await rm(legacyPath, { force: true });
+  }
 }
 
 async function replaceLedger(path: string, ledger: Ledger): Promise<void> {
