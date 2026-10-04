@@ -1,6 +1,7 @@
 import { cp, lstat, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 
+import { readIfExists } from './read-if-exists.js';
 import { emitClaudeAgent, emitCodexAgent, GENERATED_MARKER_TOML } from './agent-emit.js';
 import type { ParsedAgentFile } from './agent-frontmatter.js';
 import type { SourceAgent, SourceSkill } from './discover.js';
@@ -145,8 +146,13 @@ export function agentFileName(name: string, target: Target): string {
   return target === 'claude' ? `${name}.md` : `${name}.toml`;
 }
 
+/**
+ * Whether a file exists. Only a missing file counts as absent: a file that can't
+ * be read right now (locked, or unreadable) must not be planned as a fresh write
+ * over whatever it holds, so that error surfaces instead.
+ */
 async function fileExists(path: string): Promise<boolean> {
-  return (await readFile(path, 'utf8').catch(() => undefined)) !== undefined;
+  return (await readIfExists(path)) !== undefined;
 }
 
 async function planSkillActions(

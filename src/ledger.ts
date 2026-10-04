@@ -1,7 +1,9 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { chmod, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
+import { readIfExists } from './read-if-exists.js';
+import { retryOnWindowsLock } from './file-retry.js';
 import type { Target } from './frontmatter.js';
 import { isMapping } from './frontmatter.js';
 import type { Scope } from './targets.js';
@@ -118,10 +120,10 @@ export async function readLedger(
 ): Promise<Ledger> {
   // Until the ledger has been written at its current location, the one at the
   // previous location is the record of what skillset owns.
-  const current = await readFile(path, 'utf8').catch(() => undefined);
+  const current = await readIfExists(path);
   const raw =
     current === undefined && legacyPath !== undefined && legacyPath !== path
-      ? await readFile(legacyPath, 'utf8').catch(() => undefined)
+      ? await readIfExists(legacyPath)
       : current;
   if (raw === undefined) return { version: 2, items: {} };
 
@@ -180,7 +182,7 @@ export async function writeLedger(
   // and never when both names reach the same file (a symlinked XDG_CONFIG_HOME,
   // say): removing it would delete the ledger just written.
   if (legacyPath !== undefined && !(await sameFile(path, legacyPath))) {
-    await rm(legacyPath, { force: true });
+    await retryOnWindowsLock(() => rm(legacyPath, { force: true }));
   }
 }
 
@@ -196,7 +198,7 @@ async function replaceLedger(path: string, ledger: Ledger): Promise<void> {
       flag: 'wx',
     });
     await chmod(temporary, 0o600);
-    await rename(temporary, path);
+    await retryOnWindowsLock(() => rename(temporary, path));
   } catch (cause) {
     await rm(temporary, { force: true });
     throw cause;

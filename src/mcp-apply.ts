@@ -1,8 +1,9 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 import { parse as parseToml, stringify as stringifyToml } from 'smol-toml';
 
+import { readIfExists } from './read-if-exists.js';
 import { withoutByteOrderMark } from './byte-order-mark.js';
 import {
   backupOnce,
@@ -42,7 +43,7 @@ function claudeServers(config: Record<string, unknown>): Record<string, unknown>
 }
 
 async function codexServers(path: string): Promise<Record<string, unknown>> {
-  const raw = await readFile(path, 'utf8').catch(() => undefined);
+  const raw = await readIfExists(path);
   if (raw === undefined) return {};
 
   let parsed: unknown;
@@ -164,7 +165,7 @@ async function applyCodex(
   actions: EmbeddedAction[],
   file: string,
 ): Promise<void> {
-  let contents = await readFile(file, 'utf8').catch(() => '');
+  let contents = (await readIfExists(file)) ?? '';
 
   for (const action of actions) {
     const replacement =

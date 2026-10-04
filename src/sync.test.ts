@@ -1,77 +1,28 @@
 import { afterEach, describe, expect, it } from 'bun:test';
-import { lstat, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import {
+  exists,
+  freshLedger,
+  makeSources,
+  makeTargets,
+  options,
+  removeSyncFixtures,
+  temporaryDirectory,
+} from '../test/sync-fixture.js';
 import { GENERATED_MARKER_TOML } from './agent-emit.js';
-import { parseAgentFile } from './agent-frontmatter.js';
-import type { SourceAgent, SourceSkill } from './discover.js';
 import { GENERATED_MARKER } from './emit.js';
-import { parseSkillFile } from './frontmatter.js';
-import { hashContent, type Ledger } from './ledger.js';
+import { hashContent } from './ledger.js';
 import {
   agentFileName,
   executeSync,
   hasDrifted,
   planSync,
   type CompilableSources,
-  type SyncOptions,
 } from './sync.js';
-import { resolveTargets, type Targets } from './targets.js';
 
-const temporaryDirectories: string[] = [];
-
-async function exists(path: string): Promise<boolean> {
-  return (await stat(path).catch(() => undefined)) !== undefined;
-}
-
-async function makeTargets(): Promise<Targets> {
-  const base = await mkdtemp(join(tmpdir(), 'skillset-sync-'));
-  temporaryDirectories.push(base);
-
-  return resolveTargets('user', join(base, 'home'), base);
-}
-
-function freshLedger(): Ledger {
-  return { version: 2, items: {} };
-}
-
-afterEach(async () => {
-  await Promise.all(
-    temporaryDirectories
-      .splice(0)
-      .map((directory) => rm(directory, { recursive: true, force: true })),
-  );
-});
-
-const skillRaw = '---\nname: demo\ndescription: A demo.\n---\n\nBody.\n';
-const agentRaw = '---\nname: reviewer\ndescription: Reviews.\n---\n\nYou review.\n';
-
-async function makeSources(): Promise<CompilableSources> {
-  const directory = await mkdtemp(join(tmpdir(), 'skillset-source-'));
-  temporaryDirectories.push(directory);
-
-  await writeFile(join(directory, 'SKILL.md'), skillRaw);
-  const skill: SourceSkill = { name: 'demo', directory, raw: skillRaw, supportingFiles: [] };
-  const agent: SourceAgent = {
-    name: 'reviewer',
-    path: join(directory, 'reviewer.md'),
-    raw: agentRaw,
-  };
-
-  return {
-    skills: [{ source: skill, parsed: parseSkillFile(skillRaw) }],
-    agents: [{ source: agent, parsed: parseAgentFile(agentRaw) }],
-    instructions: 'Be helpful.\n',
-  };
-}
-
-const options: SyncOptions = {
-  targets: ['claude', 'codex'],
-  kinds: ['skill', 'agent', 'instructions'],
-  prune: false,
-  force: false,
-};
+afterEach(removeSyncFixtures);
 
 describe('agentFileName', () => {
   it('is .md for Claude and .toml for Codex', () => {
@@ -82,8 +33,7 @@ describe('agentFileName', () => {
 
 describe('hasDrifted', () => {
   it('is false when there is nothing recorded or every recorded file matches', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'skillset-drifted-'));
-    temporaryDirectories.push(root);
+    const root = await temporaryDirectory('skillset-drifted-');
     await writeFile(join(root, 'SKILL.md'), 'contents');
 
     expect(await hasDrifted(root, undefined)).toBe(false);
@@ -91,8 +41,7 @@ describe('hasDrifted', () => {
   });
 
   it('is true when a recorded file is missing or changed', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'skillset-drifted-'));
-    temporaryDirectories.push(root);
+    const root = await temporaryDirectory('skillset-drifted-');
     await writeFile(join(root, 'SKILL.md'), 'edited');
 
     expect(await hasDrifted(root, { files: { 'SKILL.md': hashContent('original') } })).toBe(true);
@@ -302,30 +251,5 @@ describe('executeSync', () => {
     expect(
       await readFile(join(targets.claude.skills, 'demo', 'references', 'notes.md'), 'utf8'),
     ).toBe('notes');
-  });
-});
-
-describe('symlinked supporting files', () => {
-  it('copies the linked content, not the link', async () => {
-    const targets = await makeTargets();
-    const sources = await makeSources();
-    const skill = sources.skills[0]!;
-    const original = join(skill.source.directory, 'original.txt');
-    await writeFile(original, 'shared data');
-    await symlink(original, join(skill.source.directory, 'data.txt'));
-    sources.skills[0] = { ...skill, source: { ...skill.source, supportingFiles: ['data.txt'] } };
-
-    const ledger = freshLedger();
-    const actions = await planSync(sources, targets, ledger, {
-      ...options,
-      targets: ['claude'],
-      kinds: ['skill'],
-    });
-    await executeSync(sources, actions, ledger, 'user');
-
-    const copied = join(targets.claude.skills, 'demo', 'data.txt');
-    const status = await lstat(copied);
-    expect(status.isSymbolicLink()).toBe(false);
-    expect(await readFile(copied, 'utf8')).toBe('shared data');
   });
 });

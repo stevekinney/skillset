@@ -2,6 +2,8 @@ import type { Dirent } from 'node:fs';
 import { readdir, readFile, realpath, stat } from 'node:fs/promises';
 import { basename, join, relative } from 'node:path';
 
+import { isMissingFile } from './read-if-exists.js';
+
 /** A skill directory found in the source tree, with its raw SKILL.md. */
 export type SourceSkill = {
   /** The directory name, which the spec requires to equal the `name` field. */
@@ -83,18 +85,12 @@ async function entryKind(
   const target = await stat(join(directory, entry.name)).catch((cause: unknown) => {
     // Only a missing target means a broken link; any other failure (a
     // permission error, say) would otherwise silently drop the source.
-    if (isMissing(cause)) return undefined;
+    if (isMissingFile(cause)) return undefined;
     throw cause;
   });
   if (target?.isDirectory()) return 'directory';
 
   return target?.isFile() ? 'file' : undefined;
-}
-
-function isMissing(cause: unknown): boolean {
-  if (typeof cause !== 'object' || cause === null || !('code' in cause)) return false;
-
-  return cause.code === 'ENOENT' || cause.code === 'ENOTDIR';
 }
 
 async function collectFiles(
