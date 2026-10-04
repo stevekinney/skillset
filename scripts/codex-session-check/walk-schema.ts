@@ -200,10 +200,15 @@ function pickByDiscriminator(
   return options.find((option) => option._zod.propValues?.[discriminator]?.has(tag));
 }
 
-/** A union of an enum and a plain string is an "open enum": known values plus anything else. */
+/**
+ * A union of an enum and a catch-all string is an "open enum": known values plus
+ * anything else. `openEnum` builds the catch-all as a `z.custom` string (so the
+ * inferred type keeps the literals); a plain `z.string()` is accepted too.
+ */
 function findOpenEnum(options: SchemaNode[]): SchemaNode | undefined {
   const types = options.map((option) => definitionOf(option).type);
-  return types.length === 2 && types.includes('string') && types.includes('enum')
+  const hasCatchAll = types.includes('string') || types.includes('custom');
+  return types.length === 2 && hasCatchAll && types.includes('enum')
     ? options[types.indexOf('enum')]
     : undefined;
 }
@@ -225,7 +230,9 @@ function kindMatches(definition: Definition, wanted: string, value: unknown): bo
   if (wanted === 'string' && definition.type === 'enum') {
     return literalValuesOf(definition).includes(value);
   }
-  if (wanted === 'string') return definition.type === 'string' || definition.type === 'literal';
+  if (wanted === 'string') {
+    return ['string', 'literal', 'custom'].includes(definition.type);
+  }
   return definition.type === wanted || (wanted === 'null' && definition.type === 'nullable');
 }
 
