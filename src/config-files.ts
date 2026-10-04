@@ -2,7 +2,6 @@ import { copyFile, mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 import { isMissingFile, readIfExists } from './read-if-exists.js';
-import { retryOnWindowsLock } from './file-retry.js';
 import { withoutByteOrderMark } from './byte-order-mark.js';
 import { isMapping } from './frontmatter.js';
 
@@ -43,11 +42,11 @@ export async function backupOnce(path: string, backedUp: Set<string>): Promise<v
   if (backedUp.has(path)) return;
 
   backedUp.add(path);
-  await retryOnWindowsLock(() => copyFile(path, `${path}.skillset-backup`)).catch(
-    (cause: unknown) => {
-      // Nothing to back up when the file doesn't exist yet. Any other failure
-      // stops the write: editing a config without its backup isn't safe.
-      if (!isMissingFile(cause)) throw cause;
-    },
-  );
+  // No retry on a Windows lock: the config belongs to the user, and whoever
+  // holds it may be changing it, which would make the planned edit stale.
+  await copyFile(path, `${path}.skillset-backup`).catch((cause: unknown) => {
+    // Nothing to back up when the file doesn't exist yet. Any other failure
+    // stops the write: editing a config without its backup isn't safe.
+    if (!isMissingFile(cause)) throw cause;
+  });
 }
