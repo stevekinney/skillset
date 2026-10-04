@@ -1,5 +1,5 @@
-import { createHash } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 import type { Target } from './frontmatter.js';
@@ -128,10 +128,52 @@ export async function readLedger(path: string, migration: LedgerMigration): Prom
   return { version: 2, items: {} };
 }
 
-/** Persist the ledger. */
+/**
+ * Persist the ledger. It records full MCP entries, including `env` values and
+ * `headers` that often carry tokens, so it is owner-only (`0600`; Windows
+ * ignores the bits). It is written to a new file and renamed over the old one:
+ * rewriting in place would put the new secrets in an existing, possibly
+ * world-readable inode until a later `chmod`, and a crash in between would leave
+ * them there.
+ */
+/**
+ * Writes in progress, by path. Overlapping writes to one ledger run one after
+ * another: on Windows, renaming onto a file another in-flight rename holds open
+ * fails with EPERM, and serializing also makes the last write win.
+ */
+const pendingWrites = new Map<string, Promise<void>>();
+
 export async function writeLedger(path: string, ledger: Ledger): Promise<void> {
+  const previous = pendingWrites.get(path) ?? Promise.resolve();
+  const write = previous.then(
+    () => replaceLedger(path, ledger),
+    () => replaceLedger(path, ledger),
+  );
+  pendingWrites.set(path, write);
+  try {
+    await write;
+  } finally {
+    if (pendingWrites.get(path) === write) pendingWrites.delete(path);
+  }
+}
+
+async function replaceLedger(path: string, ledger: Ledger): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, `${JSON.stringify(ledger, undefined, 2)}\n`, 'utf8');
+  // Unique per write, so a stale file from a crashed run with the same PID
+  // never collides with this one.
+  const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporary, `${JSON.stringify(ledger, undefined, 2)}\n`, {
+      encoding: 'utf8',
+      mode: 0o600,
+      flag: 'wx',
+    });
+    await chmod(temporary, 0o600);
+    await rename(temporary, path);
+  } catch (cause) {
+    await rm(temporary, { force: true });
+    throw cause;
+  }
 }
 
 /** Record a managed item (mutates the in-memory ledger). */

@@ -3,6 +3,7 @@ import { join } from 'node:path';
 
 import { parse as parseToml } from 'smol-toml';
 
+import { withoutByteOrderMark } from './byte-order-mark.js';
 import { isMapping } from './frontmatter.js';
 import { hashContent, structurallyEqual, type LedgerItem } from './ledger.js';
 
@@ -24,8 +25,9 @@ async function fileItemStatus(key: string, item: LedgerItem): Promise<TargetStat
 }
 
 async function readConfigMapping(file: string): Promise<Record<string, unknown> | undefined> {
-  const raw = await readFile(file, 'utf8').catch(() => undefined);
-  if (raw === undefined) return undefined;
+  const read = await readFile(file, 'utf8').catch(() => undefined);
+  if (read === undefined) return undefined;
+  const raw = withoutByteOrderMark(read);
 
   try {
     const parsed: unknown = file.endsWith('.toml') ? parseToml(raw) : JSON.parse(raw);

@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import { parse as parseToml } from 'smol-toml';
 import { parse as parseYaml } from 'yaml';
 
+import { withoutByteOrderMark } from './byte-order-mark.js';
 import { GENERATED_MARKER_TOML } from './agent-emit.js';
 import { INSTRUCTIONS_SOURCE_FILENAME } from './discover.js';
 import { GENERATED_MARKER } from './emit.js';
@@ -86,7 +87,8 @@ const CODEX_AGENT_SCALARS = [
 ] as const;
 
 async function importCodexAgent(originPath: string, destinationPath: string): Promise<void> {
-  const parsed: unknown = parseToml(await readFile(originPath, 'utf8'));
+  const raw = await readFile(originPath, 'utf8');
+  const parsed: unknown = parseToml(withoutByteOrderMark(raw));
   if (!isMapping(parsed)) throw new Error(`${originPath} is not a TOML mapping`);
 
   const name = typeof parsed['name'] === 'string' ? parsed['name'] : undefined;
