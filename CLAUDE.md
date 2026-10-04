@@ -62,8 +62,9 @@ bun run package:check    # Run publint + @arethetypeswrong/cli on packed tarball
 - `analysis.ts` — discovers + doctor-checks every source kind into one `Analysis`.
 - `commands.ts` — `list`/`show`/`new`/`remove`/`get`/`set` CRUD over sources.
 - `commands-run.ts` — `sync`, `doctor --targets`, and `import` orchestration.
+- `run-context.ts` — `RunContext` and `createRunContext`: the cwd, home, source root, and the tools' `CLAUDE_CONFIG_DIR`/`CODEX_HOME` a command runs with.
 - `discover.ts` — source-root resolution and enumeration of all six kinds.
-- `targets.ts` — `resolveTargets(scope, home, cwd)`: every destination path for both tools at both scopes, plus the ledger path.
+- `targets.ts` — `resolveTargets(scope, home, cwd, overrides?)`: every destination path for both tools at both scopes (honoring `CLAUDE_CONFIG_DIR`/`CODEX_HOME` at user scope), plus the ledger path.
 - `ledger.ts` — the sync ledger (v2): per-output hashes, timestamps, managed entries; v1 migration; `stableStringify`/`structurallyEqual`.
 - `drift.ts` — compares ledger items against disk (`clean`/`drift`/`missing`).
 - `frontmatter.ts` — skill union Zod schema, per-target projections, `agents/openai.yaml` derivation, shared `splitFrontmatter`/`isMapping`.

@@ -143,6 +143,17 @@ keys. Every type has `if`, `timeout` (positive number, seconds),
 `server`, `tool`, `input`. http: `url` (URL), `headers`, `allowedEnvVars`,
 @internal `cloud`. agent: `prompt`, `model`.
 
+**`CLAUDE_CONFIG_DIR`** (checked 2026-10-04 against 2.1.289; `src/targets.ts` honors it):
+`.claude.json` lives at `join(CLAUDE_CONFIG_DIR || homedir(), ".claude.json")`, and
+`settings.json` at `join(CLAUDE_CONFIG_DIR || ~/.claude, "settings.json")` (VERIFIED,
+binary). Transcripts go under `CLAUDE_CONFIG_DIR ?? ~/.claude` + `projects` (VERIFIED).
+The user `skills/` directory and `CLAUDE.md` are built from the same config-home
+helper as `settings.json` (INFERRED from the binary's call sites). The user `agents/`
+directory is INFERRED to follow the same pattern; it is not confirmed. A relative
+value is an error in Claude Code ("is not an absolute path"). Claude Code reads it only
+from the environment, never from a settings `env` block. The docs don't list which
+paths move.
+
 **Memory**: `CLAUDE.md` chain (managed → `~/.claude/CLAUDE.md` → project →
 `CLAUDE.local.md`), `@path` imports (depth 4), `.claude/rules/*.md` +
 `~/.claude/rules/*.md` with `paths:` frontmatter. `AGENTS.md` is not read
@@ -278,6 +289,11 @@ Interrupt event, SessionStart `source` gained `fork`. UNVERIFIED: whether Rust
 checks `hookEventName` inside `hookSpecificOutput` against the running event,
 exact `tool_response` shapes for MCP tools, per-tool `tool_input` shapes (kept
 `unknown`), introduction versions of PostToolBatch and UserPromptExpansion.
+
+**`CODEX_HOME`** (VERIFIED, codex-rs `utils/home-dir` and `ext/skills/src/host_roots.rs` at
+rust-v0.160.0): defaults to `home_dir()/.codex` and moves `config.toml`, `agents/`,
+`hooks.json`, and `AGENTS.md`. User skills stay at `home_dir()/.agents/skills`, and
+`$CODEX_HOME/skills` is only the deprecated legacy root. `src/targets.ts` honors it.
 
 **Other config.toml surface** a compiler should know: `model*` keys,
 `approval_policy` (untrusted|on-request|never), `sandbox_mode`,
