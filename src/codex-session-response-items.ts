@@ -68,7 +68,7 @@ export const responsesWebSearchActionSchema = z.discriminatedUnion('type', [
  * Builds the `ResponseItem` union. `extraShape` is added to every variant, which
  * is how `guardian_history` entries gain their `guardian_metadata` key.
  */
-export function buildResponseItemSchema<Extra extends z.ZodRawShape>(extraShape: Extra) {
+export function buildCodexResponseItemSchema<Extra extends z.ZodRawShape>(extraShape: Extra) {
   const base = {
     ...idShape,
     internal_chat_message_metadata_passthrough: internalMessageMetadataSchema.optional(),
@@ -194,11 +194,7 @@ export function buildResponseItemSchema<Extra extends z.ZodRawShape>(extraShape:
   ]);
 }
 
-export const responseItemSchema = buildResponseItemSchema({});
+export const codexResponseItemSchema = buildCodexResponseItemSchema({});
 
-/** `ResponseItem`, for example `ResponseItemFor<'function_call'>`. */
-export type ResponseItem = z.infer<typeof responseItemSchema>;
-export type ResponseItemFor<Type extends ResponseItem['type']> = Extract<
-  ResponseItem,
-  { type: Type }
->;
+/** One Codex `response_item` payload; `CodexResponseItemFor` narrows to one type. */
+export type CodexResponseItem = z.infer<typeof codexResponseItemSchema>;

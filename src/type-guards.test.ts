@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 
+import { otherPayloads } from '../test/codex-session-fixtures.js';
+
 import {
   isAgentFrontmatter,
   isClaudeAgentMcpServer,
@@ -9,12 +11,17 @@ import {
   isClaudeHookOutput,
   isClaudeHookSettings,
   isClaudeMcpServer,
+  isClaudeSessionRecord,
+  isClaudeSessionRecordFor,
   isClaudeSettingsEffort,
+  isClaudeWorkflowJournalRecord,
   isCodexHookInput,
   isCodexHookInputFor,
   isCodexHookOutputFor,
   isCodexHookSettings,
   isCodexMcpServer,
+  isCodexSessionRecord,
+  isCodexSessionRecordFor,
   isCodexSkills,
   isCodexTools,
   isDefaultsSource,
@@ -139,5 +146,44 @@ describe('hook payload guards', () => {
     if (!isCodexHookOutputFor('Stop', output)) throw new Error('expected a Stop output');
     const decision: 'block' | undefined = output.decision;
     expect(decision).toBe('block');
+  });
+});
+
+describe('session record guards', () => {
+  const claudeTitle = { type: 'ai-title', sessionId: 's-1', aiTitle: 'A title' };
+  const codexMeta = {
+    timestamp: '2026-01-02T03:04:05.678Z',
+    type: 'session_meta',
+    payload: otherPayloads.session_meta,
+  };
+
+  it('checks Claude Code transcript records, in general and for one type', () => {
+    expect(isClaudeSessionRecord(claudeTitle)).toBe(true);
+    expect(isClaudeSessionRecord({ type: 'not-a-record' })).toBe(false);
+    expect(isClaudeSessionRecordFor('ai-title', claudeTitle)).toBe(true);
+    expect(isClaudeSessionRecordFor('custom-title', claudeTitle)).toBe(false);
+
+    const value: unknown = claudeTitle;
+    if (!isClaudeSessionRecordFor('ai-title', value))
+      throw new Error('expected an ai-title record');
+    const title: string = value.aiTitle;
+    expect(title).toBe('A title');
+  });
+
+  it('checks Claude Code workflow journal records', () => {
+    expect(isClaudeWorkflowJournalRecord({ type: 'launched' })).toBe(true);
+    expect(isClaudeWorkflowJournalRecord({ type: 'ai-title' })).toBe(false);
+  });
+
+  it('checks Codex rollout records, in general and for one type', () => {
+    expect(isCodexSessionRecord(codexMeta)).toBe(true);
+    expect(isCodexSessionRecord({ type: 'session_meta' })).toBe(false);
+    expect(isCodexSessionRecordFor('session_meta', codexMeta)).toBe(true);
+    expect(isCodexSessionRecordFor('turn_context', codexMeta)).toBe(false);
+
+    const value: unknown = codexMeta;
+    if (!isCodexSessionRecordFor('session_meta', value)) throw new Error('expected session_meta');
+    const directory: string = value.payload.cwd;
+    expect(directory).toBe('/work');
   });
 });

@@ -6,12 +6,23 @@ import { claudeHookInputSchema, claudeHookInputSchemas } from './claude-hook-inp
 import { claudeHookOutputOrAsyncSchema } from './claude-hook-output-schemas.js';
 import type { ClaudeHookEventName } from './claude-hook-shared.js';
 import {
+  claudeSessionRecordSchema,
+  claudeSessionRecordSchemas,
+  type ClaudeSessionRecordType,
+} from './claude-session-record-schema.js';
+import { claudeWorkflowJournalRecordSchema } from './claude-session-workflow-journal.js';
+import {
   codexHookInputSchema,
   codexHookInputSchemas,
   codexHookOutputSchemas,
   type CodexHookEventName,
 } from './codex-hook-payloads.js';
 import { codexSkillsSchema, codexToolsSchema } from './codex-agent-tables.js';
+import {
+  codexSessionRecordSchema,
+  codexSessionRecordSchemas,
+  type CodexSessionRecordType,
+} from './codex-session-records.js';
 import { claudeSettingsEffortSchema, defaultsSourceSchema } from './defaults-config.js';
 import {
   claudeEffortSchema,
@@ -111,4 +122,29 @@ export function isCodexHookOutputFor<Name extends CodexHookEventName>(
   value: unknown,
 ): value is z.input<(typeof codexHookOutputSchemas)[Name]> {
   return codexHookOutputSchemas[eventName].safeParse(value).success;
+}
+
+/** Whether a value is one record (one line) of a Claude Code session transcript. */
+export const isClaudeSessionRecord = schemaGuard(claudeSessionRecordSchema);
+
+/** Whether a value is one record of a Claude Code workflow `journal.jsonl`. */
+export const isClaudeWorkflowJournalRecord = schemaGuard(claudeWorkflowJournalRecordSchema);
+
+/** Whether a value is one record (one line) of a Codex session rollout. */
+export const isCodexSessionRecord = schemaGuard(codexSessionRecordSchema);
+
+/** Whether a value is a Claude Code session transcript record of one `type`. */
+export function isClaudeSessionRecordFor<Type extends ClaudeSessionRecordType>(
+  type: Type,
+  value: unknown,
+): value is z.input<(typeof claudeSessionRecordSchemas)[Type]> {
+  return claudeSessionRecordSchemas[type].safeParse(value).success;
+}
+
+/** Whether a value is a Codex session rollout record of one `type`. */
+export function isCodexSessionRecordFor<Type extends CodexSessionRecordType>(
+  type: Type,
+  value: unknown,
+): value is z.input<(typeof codexSessionRecordSchemas)[Type]> {
+  return codexSessionRecordSchemas[type].safeParse(value).success;
 }

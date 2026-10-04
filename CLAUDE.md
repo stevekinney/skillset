@@ -55,6 +55,7 @@ bun run package:check    # Run publint + @arethetypeswrong/cli on packed tarball
 - `cli.ts` — command dispatch; all IO is injected via `CliDependencies` (cwd, env, homeDirectory, log, optional mcpTransport) so tests run in temp dirs without touching real stdio.
 - `invocation.ts` — `node:util` `parseArgs` argument parsing; per-command `--help` text lives in `help.ts`.
 - `help.ts` — comprehensive per-command help text (`commandHelp(name)`) plus the top-level `USAGE`.
+- `claude-session-*.ts` / `codex-session-*.ts` — Zod schemas for Claude Code session transcripts and Codex session rollouts (JSONL), checked against real sessions by `scripts/check-claude-session-schema.ts` and `scripts/check-codex-session-schema.ts` (`bun run check:claude-sessions` / `check:codex-sessions`).
 - `type-guards.ts` — a schema-backed type guard for every public top-level schema (narrows to `z.input`); `public-api.test.ts` fails if a module exports a schema `index.ts` doesn't.
 - `mcp-server.ts` — exposes every CLI operation as an MCP tool (`createMcpServer`) served over stdio (`runMcpServer`); tool results reuse the same JSON shapes as `--json` CLI output.
 - `analysis.ts` — discovers + doctor-checks every source kind into one `Analysis`.

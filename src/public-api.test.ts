@@ -21,6 +21,23 @@ const INTERNAL_SCHEMAS = new Map<string, string[]>([
       'sessionCronSchema',
     ],
   ],
+  ['codex-session-metadata.ts', ['originatorSchema', 'sessionSourceSchema', 'threadSourceSchema']],
+  [
+    'codex-session-response-items.ts',
+    ['buildCodexResponseItemSchema', 'responsesWebSearchActionSchema'],
+  ],
+]);
+
+/**
+ * Whole modules of building blocks for the Codex session schema. They exist only
+ * because the schema is split to stay under the lint's file-length cap; every
+ * shape in them is reachable through `codexSessionRecordSchemas` and friends.
+ */
+const INTERNAL_MODULES = new Set([
+  'codex-session-content.ts',
+  'codex-session-shared.ts',
+  'codex-session-state.ts',
+  'codex-session-turn-item-parts.ts',
 ]);
 
 const sourceDirectory = import.meta.dir;
@@ -48,6 +65,7 @@ describe('public API', () => {
     const missing: string[] = [];
 
     for (const file of await schemaModules()) {
+      if (INTERNAL_MODULES.has(file)) continue;
       const module: Record<string, unknown> = await import(join(sourceDirectory, file));
       const internal = INTERNAL_SCHEMAS.get(file) ?? [];
 
@@ -71,6 +89,17 @@ describe('public API', () => {
     }
   });
 
+  it('keeps every internal module out of the public API', async () => {
+    for (const file of INTERNAL_MODULES) {
+      const module: Record<string, unknown> = await import(join(sourceDirectory, file));
+      const schemas = Object.keys(module).filter((name) => /Schemas?$/.test(name));
+      expect(schemas.length).toBeGreaterThan(0);
+      for (const name of schemas) {
+        expect((publicApi as Record<string, unknown>)[name]).toBeUndefined();
+      }
+    }
+  });
+
   it('exports a type guard for every public top-level schema', () => {
     const guards = Object.keys(publicApi).filter((name) => /^is[A-Z]/.test(name));
     expect(guards.toSorted()).toEqual(
@@ -83,12 +112,17 @@ describe('public API', () => {
         'isClaudeHookOutput',
         'isClaudeHookSettings',
         'isClaudeMcpServer',
+        'isClaudeSessionRecord',
+        'isClaudeSessionRecordFor',
         'isClaudeSettingsEffort',
+        'isClaudeWorkflowJournalRecord',
         'isCodexHookInput',
         'isCodexHookInputFor',
         'isCodexHookOutputFor',
         'isCodexHookSettings',
         'isCodexMcpServer',
+        'isCodexSessionRecord',
+        'isCodexSessionRecordFor',
         'isCodexSkills',
         'isCodexTools',
         'isDefaultsSource',

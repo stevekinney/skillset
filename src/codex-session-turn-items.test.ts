@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { turnItemSchema } from './codex-session-turn-items.js';
+import { codexTurnItemSchema } from './codex-session-turn-items.js';
 
 const duration = { secs: 1, nanos: 2 };
 const searchResult = { type: 'text_result', ref_id: 'r1', title: 't', url: 'https://example.com' };
@@ -239,11 +239,11 @@ const items: Record<string, Record<string, unknown>[]> = {
   ContextCompaction: [{ type: 'ContextCompaction', id: 'i' }],
 };
 
-describe('turnItemSchema', () => {
+describe('codexTurnItemSchema', () => {
   for (const [type, variants] of Object.entries(items)) {
     it(`parses ${variants.length} ${type} item(s)`, () => {
       for (const item of variants) {
-        expect(turnItemSchema.safeParse(item).success).toBe(true);
+        expect(codexTurnItemSchema.safeParse(item).success).toBe(true);
       }
     });
   }
@@ -267,7 +267,7 @@ describe('turnItemSchema', () => {
       { type: 'Extension', kind: 'unknown.kind', id: 'i' },
       { type: 'NotAnItem', id: 'i' },
     ]) {
-      expect(turnItemSchema.safeParse(item).success).toBe(false);
+      expect(codexTurnItemSchema.safeParse(item).success).toBe(false);
     }
   });
 });

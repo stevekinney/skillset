@@ -1,10 +1,13 @@
 import { z } from 'zod';
 
-import { compactedPayloadSchema } from './codex-session-compaction.js';
+import { codexCompactedPayloadSchema } from './codex-session-compaction.js';
 import { harnessMetadataSchema } from './codex-session-content.js';
 import { codexEventMessageSchema } from './codex-session-events.js';
-import { sessionMetaPayloadSchema, turnContextPayloadSchema } from './codex-session-metadata.js';
-import { responseItemSchema } from './codex-session-response-items.js';
+import {
+  codexSessionMetaPayloadSchema,
+  codexTurnContextPayloadSchema,
+} from './codex-session-metadata.js';
+import { codexResponseItemSchema } from './codex-session-response-items.js';
 import {
   interAgentCommunicationMetadataPayloadSchema,
   interAgentCommunicationPayloadSchema,
@@ -83,11 +86,11 @@ function record<Type extends CodexSessionRecordType, Payload extends z.ZodType>(
 
 /** The schema for each record `type`, for example `codexSessionRecordSchemas.event_msg`. */
 export const codexSessionRecordSchemas = {
-  session_meta: record('session_meta', sessionMetaPayloadSchema),
+  session_meta: record('session_meta', codexSessionMetaPayloadSchema),
   response_item: z.looseObject({
     ...envelope,
     type: z.literal('response_item'),
-    payload: responseItemSchema,
+    payload: codexResponseItemSchema,
     metadata: harnessMetadataSchema.optional(),
   }),
   inter_agent_communication: record(
@@ -98,8 +101,8 @@ export const codexSessionRecordSchemas = {
     'inter_agent_communication_metadata',
     interAgentCommunicationMetadataPayloadSchema,
   ),
-  compacted: record('compacted', compactedPayloadSchema),
-  turn_context: record('turn_context', turnContextPayloadSchema),
+  compacted: record('compacted', codexCompactedPayloadSchema),
+  turn_context: record('turn_context', codexTurnContextPayloadSchema),
   token_usage_record: record('token_usage_record', tokenUsageRecordPayloadSchema),
   world_state: record('world_state', worldStatePayloadSchema),
   retained_context: record('retained_context', openRecordPayloadSchema),

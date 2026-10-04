@@ -18,7 +18,12 @@ import { z } from 'zod';
  * and let the checker report values it has not seen.
  */
 export function openEnum<const Values extends readonly [string, ...string[]]>(values: Values) {
-  return z.union([z.enum(values), z.string()]);
+  // `string & Record<never, never>` accepts any string without absorbing the
+  // literals, so the inferred type keeps the known values for autocomplete.
+  return z.union([
+    z.enum(values),
+    z.custom<string & Record<never, never>>((value) => typeof value === 'string'),
+  ]);
 }
 
 /**

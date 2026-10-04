@@ -13,7 +13,7 @@ import {
   reasoningSummarySchema,
   tokenUsageSchema,
 } from './codex-session-shared.js';
-import { turnItemSchema } from './codex-session-turn-items.js';
+import { codexTurnItemSchema } from './codex-session-turn-items.js';
 
 /**
  * `EventMsg`: the `event_msg` records, discriminated on `payload.type`.
@@ -147,7 +147,7 @@ export const codexEventMessageSchemas = {
     type: z.literal('item_completed'),
     thread_id: z.string(),
     turn_id: z.string(),
-    item: turnItemSchema,
+    item: codexTurnItemSchema,
     started_at_ms: z.number().optional(),
     completed_at_ms: z.number(),
   }),

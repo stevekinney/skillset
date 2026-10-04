@@ -37,7 +37,7 @@ import {
  */
 
 /** `item_completed.payload.item`, discriminated on `type`. */
-export const turnItemSchema = z.discriminatedUnion('type', [
+export const codexTurnItemSchema = z.discriminatedUnion('type', [
   z.looseObject({
     type: z.literal('UserMessage'),
     id: z.string(),
@@ -242,4 +242,4 @@ export const turnItemSchema = z.discriminatedUnion('type', [
   z.looseObject({ type: z.literal('ContextCompaction'), id: z.string() }),
 ]);
 
-export type TurnItem = z.infer<typeof turnItemSchema>;
+export type CodexTurnItem = z.infer<typeof codexTurnItemSchema>;

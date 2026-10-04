@@ -97,7 +97,7 @@ const dynamicToolSchema = z.discriminatedUnion('type', [
   }),
 ]);
 
-export const sessionMetaPayloadSchema = z.looseObject({
+export const codexSessionMetaPayloadSchema = z.looseObject({
   creator_user_id: z.string().optional(),
   creator_account_id: z.string().optional(),
   // Older rollouts omit `session_id`; Codex then reuses `id`.
@@ -151,7 +151,7 @@ export const sessionMetaPayloadSchema = z.looseObject({
     .optional(),
 });
 
-export const turnContextPayloadSchema = z.looseObject({
+export const codexTurnContextPayloadSchema = z.looseObject({
   turn_id: z.string().optional(),
   root_turn_id: z.string().optional(),
   disabled_plugin_ids: z.array(z.string()).optional(),

@@ -1,7 +1,10 @@
 import { z } from 'zod';
 
 import { harnessMetadataSchema, messagePhaseSchema } from './codex-session-content.js';
-import { buildResponseItemSchema, responseItemSchema } from './codex-session-response-items.js';
+import {
+  buildCodexResponseItemSchema,
+  codexResponseItemSchema,
+} from './codex-session-response-items.js';
 import { cyberAccessProgramSchema, multiAgentVersionSchema } from './codex-session-shared.js';
 import { tokenUsageRecordPayloadSchema } from './codex-session-state.js';
 
@@ -20,7 +23,7 @@ import { tokenUsageRecordPayloadSchema } from './codex-session-state.js';
  */
 
 /** A `guardian_history` entry is a response item with Guardian's own metadata beside it. */
-const guardianHistoryItemSchema = buildResponseItemSchema({
+const guardianHistoryItemSchema = buildCodexResponseItemSchema({
   guardian_metadata: harnessMetadataSchema.optional(),
 });
 
@@ -46,9 +49,9 @@ const retainedContextSchema = z.looseObject({
   sender_deliveries: z.array(z.unknown()).optional(),
 });
 
-export const compactedPayloadSchema = z.looseObject({
+export const codexCompactedPayloadSchema = z.looseObject({
   message: z.string(),
-  replacement_history: z.array(responseItemSchema).nullable().optional(),
+  replacement_history: z.array(codexResponseItemSchema).nullable().optional(),
   replacement_history_metadata: z.array(harnessMetadataSchema).optional(),
   guardian_history: z.array(guardianHistoryItemSchema).nullable().optional(),
   retained_context: retainedContextSchema.optional(),
