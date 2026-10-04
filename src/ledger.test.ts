@@ -189,3 +189,39 @@ describe('a failed write in a queue of writes', () => {
     expect(JSON.parse(await readFile(path, 'utf8'))).toEqual(valid);
   });
 });
+
+describe('moving the ledger to a new location', () => {
+  const item = {
+    kind: 'skill' as const,
+    name: 'demo',
+    scope: 'user' as const,
+    target: 'claude' as const,
+    hash: 'sha256:x',
+    syncedAt: 't',
+  };
+  const v1Paths = { claudeMcpConfig: '/c', codexMcpConfig: '/x' };
+
+  it('reads the old ledger until the new one exists, and prefers the new one', async () => {
+    const path = await makePath();
+    const legacy = join(dirname(path), 'legacy.json');
+    await writeFile(legacy, JSON.stringify({ version: 2, items: { demo: item } }));
+
+    const fromLegacy = await readLedger(path, v1Paths, legacy);
+    expect(fromLegacy.items).toEqual({ demo: item });
+    await writeFile(path, JSON.stringify({ version: 2, items: {} }));
+    const fromCurrent = await readLedger(path, v1Paths, legacy);
+    expect(fromCurrent.items).toEqual({});
+  });
+
+  it('retires the old ledger only after writing the new one', async () => {
+    const path = await makePath();
+    const legacy = join(dirname(path), 'legacy.json');
+    await writeFile(legacy, JSON.stringify({ version: 2, items: { demo: item } }));
+    const ledger = await readLedger(path, v1Paths, legacy);
+
+    await writeLedger(path, ledger, legacy);
+    const entries = await readdir(dirname(path));
+    expect(entries).toEqual(['state.json']);
+    expect(JSON.parse(await readFile(path, 'utf8')).items).toEqual({ demo: item });
+  });
+});

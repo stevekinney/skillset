@@ -5,7 +5,10 @@ export type RunContext = {
   cwd: string;
   homeDirectory: string;
   skillsetDirectory?: string | undefined;
-  /** The tools' own `CLAUDE_CONFIG_DIR` and `CODEX_HOME`, applied at user scope. */
+  /**
+   * The tools' own `CLAUDE_CONFIG_DIR` and `CODEX_HOME` (applied at user scope),
+   * and `XDG_CONFIG_HOME`/`APPDATA`, which place the ledger.
+   */
   configDirectories?: ConfigDirectoryOverrides | undefined;
   log: (line: string) => void;
 };
@@ -31,6 +34,8 @@ export function createRunContext(dependencies: {
     configDirectories: {
       claudeConfigDirectory: dependencies.env['CLAUDE_CONFIG_DIR'],
       codexHome: dependencies.env['CODEX_HOME'],
+      xdgConfigHome: dependencies.env['XDG_CONFIG_HOME'],
+      appData: dependencies.env['APPDATA'],
     },
     log: dependencies.log,
   };

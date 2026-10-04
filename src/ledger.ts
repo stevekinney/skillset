@@ -111,8 +111,18 @@ function isLedger(value: unknown): value is Ledger {
  * Read the ledger, migrating a milestone-2 MCP state file (v1) in place and
  * starting fresh on anything unreadable.
  */
-export async function readLedger(path: string, migration: LedgerMigration): Promise<Ledger> {
-  const raw = await readFile(path, 'utf8').catch(() => undefined);
+export async function readLedger(
+  path: string,
+  migration: LedgerMigration,
+  legacyPath?: string,
+): Promise<Ledger> {
+  // Until the ledger has been written at its current location, the one at the
+  // previous location is the record of what skillset owns.
+  const current = await readFile(path, 'utf8').catch(() => undefined);
+  const raw =
+    current === undefined && legacyPath !== undefined && legacyPath !== path
+      ? await readFile(legacyPath, 'utf8').catch(() => undefined)
+      : current;
   if (raw === undefined) return { version: 2, items: {} };
 
   let parsed: unknown;
@@ -143,7 +153,11 @@ export async function readLedger(path: string, migration: LedgerMigration): Prom
  */
 const pendingWrites = new Map<string, Promise<void>>();
 
-export async function writeLedger(path: string, ledger: Ledger): Promise<void> {
+export async function writeLedger(
+  path: string,
+  ledger: Ledger,
+  legacyPath?: string,
+): Promise<void> {
   const previous = pendingWrites.get(path) ?? Promise.resolve();
   const write = previous.then(
     () => replaceLedger(path, ledger),
@@ -155,6 +169,8 @@ export async function writeLedger(path: string, ledger: Ledger): Promise<void> {
   } finally {
     if (pendingWrites.get(path) === write) pendingWrites.delete(path);
   }
+  // Only after the ledger is safely at its new location is the old one retired.
+  if (legacyPath !== undefined && legacyPath !== path) await rm(legacyPath, { force: true });
 }
 
 async function replaceLedger(path: string, ledger: Ledger): Promise<void> {

@@ -146,3 +146,39 @@ describe('config directory overrides', () => {
     );
   });
 });
+
+describe('ledger location', () => {
+  const legacy = join('/home/user', '.config', 'skillset', 'state.json');
+
+  it('stays at ~/.config/skillset by default', () => {
+    const targets = resolveTargets('user', '/home/user', '/repo', { platform: 'linux' });
+    expect(targets.ledgerFile).toBe(legacy);
+    expect(targets.legacyLedgerFile).toBe(legacy);
+  });
+
+  it('follows an absolute XDG_CONFIG_HOME, at either scope, and ignores a relative one', () => {
+    const xdg = resolve('/xdg');
+    for (const scope of ['user', 'project'] as const) {
+      const targets = resolveTargets(scope, '/home/user', '/repo', {
+        xdgConfigHome: xdg,
+        platform: 'linux',
+      });
+      expect(targets.ledgerFile).toBe(join(xdg, 'skillset', 'state.json'));
+      expect(targets.legacyLedgerFile).toBe(legacy);
+    }
+    const relative = resolveTargets('user', '/home/user', '/repo', {
+      xdgConfigHome: 'xdg',
+      platform: 'linux',
+    });
+    expect(relative.ledgerFile).toBe(legacy);
+  });
+
+  it('uses %APPDATA% on Windows', () => {
+    const appData = resolve('/appdata');
+    const targets = resolveTargets('user', '/home/user', '/repo', { appData, platform: 'win32' });
+    expect(targets.ledgerFile).toBe(join(appData, 'skillset', 'state.json'));
+    expect(resolveTargets('user', '/home/user', '/repo', { platform: 'win32' }).ledgerFile).toBe(
+      legacy,
+    );
+  });
+});

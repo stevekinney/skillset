@@ -1,69 +1,23 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
-import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
-import { homedir, tmpdir } from 'node:os';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-import { defaultDependencies, runCli, type CliDependencies } from './cli.js';
+import {
+  addAgent,
+  addSkill,
+  exists,
+  invalidSkill,
+  makeFixture,
+  removeFixtures,
+  validAgent,
+  validSkill,
+} from '../test/cli-fixture.js';
+import { defaultDependencies, runCli } from './cli.js';
 
-const temporaryDirectories: string[] = [];
-
-async function exists(path: string): Promise<boolean> {
-  return (await stat(path).catch(() => undefined)) !== undefined;
-}
-
-afterEach(async () => {
-  await Promise.all(
-    temporaryDirectories
-      .splice(0)
-      .map((directory) => rm(directory, { recursive: true, force: true })),
-  );
-});
-
-type Fixture = {
-  dependencies: CliDependencies;
-  lines: string[];
-  root: string;
-  home: string;
-};
-
-async function makeFixture(): Promise<Fixture> {
-  const base = await mkdtemp(join(tmpdir(), 'skillset-cli-'));
-  temporaryDirectories.push(base);
-
-  const home = join(base, 'home');
-  await mkdir(join(base, 'skills'), { recursive: true });
-  await mkdir(home, { recursive: true });
-
-  const lines: string[] = [];
-
-  return {
-    root: base,
-    home,
-    lines,
-    dependencies: {
-      cwd: base,
-      env: { NODE_ENV: 'test' },
-      homeDirectory: home,
-      log: (line) => lines.push(line),
-    },
-  };
-}
-
-async function addSkill(fixture: Fixture, name: string, raw: string): Promise<void> {
-  await mkdir(join(fixture.root, 'skills', name), { recursive: true });
-  await writeFile(join(fixture.root, 'skills', name, 'SKILL.md'), raw);
-}
-
-async function addAgent(fixture: Fixture, name: string, raw: string): Promise<void> {
-  await mkdir(join(fixture.root, 'agents'), { recursive: true });
-  await writeFile(join(fixture.root, 'agents', `${name}.md`), raw);
-}
-
-const validSkill = '---\nname: demo\ndescription: A demo.\n---\n\nBody.\n';
-const invalidSkill = '---\nname: Bad Name\ndescription: A demo.\n---\n\nBody.\n';
-const validAgent = '---\nname: reviewer\ndescription: Reviews.\n---\n\nYou review.\n';
+afterEach(removeFixtures);
 
 describe('argument handling', () => {
   it('prints usage on --help and on usage errors', async () => {
@@ -238,28 +192,28 @@ describe('defaults', () => {
   });
 });
 
+async function runBin(overrides: Record<string, string>): Promise<string> {
+  const fixture = await makeFixture();
+  await addSkill(fixture, 'demo', validSkill);
+
+  // FORCE_COLOR/NO_COLOR must be *absent* (not empty) to stay neutral —
+  // supports-color treats FORCE_COLOR='' as "force on".
+  const env: Record<string, string | undefined> = { ...process.env };
+  delete env['FORCE_COLOR'];
+  delete env['NO_COLOR'];
+
+  const subprocess = Bun.spawn(['bun', 'run', join(import.meta.dir, 'bin.ts'), 'doctor'], {
+    cwd: fixture.root,
+    env: { ...env, ...overrides },
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  await subprocess.exited;
+
+  return new Response(subprocess.stdout).text();
+}
+
 describe('color support', () => {
-  async function runBin(overrides: Record<string, string>): Promise<string> {
-    const fixture = await makeFixture();
-    await addSkill(fixture, 'demo', validSkill);
-
-    // FORCE_COLOR/NO_COLOR must be *absent* (not empty) to stay neutral —
-    // supports-color treats FORCE_COLOR='' as "force on".
-    const env: Record<string, string | undefined> = { ...process.env };
-    delete env['FORCE_COLOR'];
-    delete env['NO_COLOR'];
-
-    const subprocess = Bun.spawn(['bun', 'run', join(import.meta.dir, 'bin.ts'), 'doctor'], {
-      cwd: fixture.root,
-      env: { ...env, ...overrides },
-      stdout: 'pipe',
-      stderr: 'pipe',
-    });
-    await subprocess.exited;
-
-    return new Response(subprocess.stdout).text();
-  }
-
   const ESCAPE = String.fromCharCode(27);
 
   it('emits no ANSI codes when NO_COLOR is set', async () => {
@@ -291,57 +245,5 @@ describe('mcp command', () => {
 
     await clientSide.close();
     expect(await served).toBe(0);
-  });
-});
-
-describe('config directory overrides', () => {
-  it('syncs into CLAUDE_CONFIG_DIR and CODEX_HOME instead of the defaults', async () => {
-    const fixture = await makeFixture();
-    await addSkill(fixture, 'demo', validSkill);
-    await addAgent(fixture, 'reviewer', validAgent);
-    const claudeHome = join(fixture.root, 'claude-config');
-    const codexHome = join(fixture.root, 'codex-home');
-    // Codex requires an explicitly set CODEX_HOME to exist already.
-    await mkdir(codexHome);
-
-    const code = await runCli(['sync'], {
-      ...fixture.dependencies,
-      env: { NODE_ENV: 'test', CLAUDE_CONFIG_DIR: claudeHome, CODEX_HOME: codexHome },
-    });
-
-    expect(code).toBe(0);
-    expect(await Bun.file(join(claudeHome, 'skills', 'demo', 'SKILL.md')).exists()).toBe(true);
-    expect(await Bun.file(join(claudeHome, 'agents', 'reviewer.md')).exists()).toBe(true);
-    expect(await Bun.file(join(codexHome, 'agents', 'reviewer.toml')).exists()).toBe(true);
-    expect(
-      await Bun.file(join(fixture.home, '.agents', 'skills', 'demo', 'SKILL.md')).exists(),
-    ).toBe(true);
-    expect(await exists(join(fixture.home, '.claude'))).toBe(false);
-    expect(await exists(join(fixture.home, '.codex'))).toBe(false);
-    expect(await exists(claudeHome)).toBe(true);
-  });
-});
-
-describe('relative CLAUDE_CONFIG_DIR', () => {
-  it('fails with a clear message instead of writing somewhere Claude Code never reads', async () => {
-    const fixture = await makeFixture();
-    await addSkill(fixture, 'demo', validSkill);
-    const code = await runCli(['sync'], {
-      ...fixture.dependencies,
-      env: { NODE_ENV: 'test', CLAUDE_CONFIG_DIR: 'relative-config' },
-    });
-    expect(code).toBe(1);
-    expect(fixture.lines.join('\n')).toContain('CLAUDE_CONFIG_DIR must be an absolute path');
-  });
-
-  it('does not affect project scope, which ignores the overrides', async () => {
-    const fixture = await makeFixture();
-    await addSkill(fixture, 'demo', validSkill);
-    const code = await runCli(['sync', '--scope', 'project'], {
-      ...fixture.dependencies,
-      env: { NODE_ENV: 'test', CLAUDE_CONFIG_DIR: 'relative-config' },
-    });
-    expect(code).toBe(0);
-    expect(await exists(join(fixture.root, '.claude', 'skills', 'demo', 'SKILL.md'))).toBe(true);
   });
 });

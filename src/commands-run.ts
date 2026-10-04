@@ -31,10 +31,14 @@ async function contextLedger(context: RunContext, targets: Targets): Promise<Led
   // the overrides would also make every project-scope command validate them.
   const userTargets = resolveTargets('user', context.homeDirectory, context.cwd);
 
-  return readLedger(targets.ledgerFile, {
-    claudeMcpConfig: userTargets.claude.mcpConfig,
-    codexMcpConfig: userTargets.codex.mcpConfig,
-  });
+  return readLedger(
+    targets.ledgerFile,
+    {
+      claudeMcpConfig: userTargets.claude.mcpConfig,
+      codexMcpConfig: userTargets.codex.mcpConfig,
+    },
+    targets.legacyLedgerFile,
+  );
 }
 
 type SyncScope = {
@@ -155,7 +159,7 @@ async function executeAll(
     backedUp,
   );
 
-  await writeLedger(targets.ledgerFile, ledger);
+  await writeLedger(targets.ledgerFile, ledger, targets.legacyLedgerFile);
 }
 
 function renderPlan(invocation: Invocation, plan: SyncPlan, log: (line: string) => void): void {
