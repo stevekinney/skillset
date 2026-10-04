@@ -98,8 +98,15 @@ function checkToolUse(
   if (!isObject(input) || typeof input['script'] !== 'string') return;
   count('inline scripts (transcript)');
   const found = scriptFindings(input['script']);
-  report('inline script', { failures: [], warnings: found.warnings }, () => location);
-  pending.set(String(block['id']), { location, rejected: found.failures.length > 0 });
+  // Claude Code refuses a script at launch for its `meta`, syntax, and determinism only; the
+  // other findings (an `agent()` option, say) would surface later, so they do not predict a refusal.
+  const launch = found.failures.filter((finding) => finding.launchCheck);
+  report(
+    'inline script',
+    { ...found, failures: found.failures.filter((finding) => !finding.launchCheck) },
+    () => location,
+  );
+  pending.set(String(block['id']), { location, rejected: launch.length > 0 });
 }
 
 function checkToolOutput(record: Record<string, unknown>, location: string) {

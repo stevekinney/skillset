@@ -11,7 +11,12 @@ import type { z } from 'zod';
 export const home = homedir();
 export const showAll = process.argv.includes('--all');
 
-export type Finding = { category: string; line?: number | undefined };
+export type Finding = {
+  category: string;
+  line?: number | undefined;
+  /** Whether Claude Code itself checks this when it launches a script (`meta`, syntax, determinism). */
+  launchCheck?: boolean;
+};
 export type Groups = Map<string, string[]>;
 
 export const counts = new Map<string, number>();

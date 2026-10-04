@@ -40,7 +40,10 @@ export const claudeWorkflowProgressAgentSchema = z.looseObject({
   lastProgressAt: z.number(),
   lastToolName: z.string().optional(),
   lastToolSummary: z.string().optional(),
-  lastAttemptReason: z.literal('stalled').optional(),
+  /** Why the agent is on a later attempt: it stalled, hit a rate limit, or the user retried it. */
+  lastAttemptReason: z.enum(['stalled', 'throttled', 'user-retry']).optional(),
+  /** The model an agent fell back to, when its own was unavailable. */
+  fallbackModel: z.string().optional(),
   promptPreview: z.string(),
   resultPreview: z.string().optional(),
   error: z.string().optional(),
@@ -63,7 +66,7 @@ export const claudeWorkflowRunRecordSchema = z.looseObject({
   timestamp: z.string(),
   startTime: z.number(),
   durationMs: z.number(),
-  status: z.enum(['completed', 'failed', 'killed']),
+  status: z.enum(['completed', 'failed', 'killed', 'paused']),
   workflowName: z.string(),
   summary: z.string(),
   script: z.string(),

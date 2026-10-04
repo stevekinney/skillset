@@ -244,10 +244,22 @@ describe('workflow run record', () => {
       }).success,
     ).toBe(true);
     expect(claudeWorkflowProgressRowSchema.safeParse(agentRow).success).toBe(true);
+    for (const lastAttemptReason of ['stalled', 'throttled', 'user-retry'])
+      expect(
+        claudeWorkflowProgressRowSchema.safeParse({
+          ...agentRow,
+          lastAttemptReason,
+          fallbackModel: 'm',
+        }).success,
+      ).toBe(true);
+    expect(
+      claudeWorkflowProgressRowSchema.safeParse({ ...agentRow, lastAttemptReason: 'other' })
+        .success,
+    ).toBe(false);
   });
 
   it('rejects an unknown status, row type, or agent state', () => {
-    expect(claudeWorkflowRunRecordSchema.safeParse({ ...record, status: 'paused' }).success).toBe(
+    expect(claudeWorkflowRunRecordSchema.safeParse({ ...record, status: 'running' }).success).toBe(
       false,
     );
     expect(claudeWorkflowProgressRowSchema.safeParse({ type: 'workflow_log' }).success).toBe(false);

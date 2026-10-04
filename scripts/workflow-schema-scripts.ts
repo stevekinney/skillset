@@ -29,13 +29,20 @@ function metaFindings(source: string): { failures: Finding[]; titles: string[] |
   const meta = parseClaudeWorkflowMeta(source);
   if (meta.ok) return { failures: [], titles: (meta.meta.phases ?? []).map(({ title }) => title) };
   const error = meta.error.replace(/\(\d+:\d+\)/, '').trim();
-  return { failures: [{ category: `meta (${error})`, line: meta.line }], titles: undefined };
+  return {
+    failures: [{ category: `meta (${error})`, line: meta.line, launchCheck: true }],
+    titles: undefined,
+  };
 }
 
 function forbiddenFindings(source: string): Finding[] {
   const forbidden = findClaudeWorkflowForbiddenApis(source);
   return forbidden.ok
-    ? forbidden.usages.map((usage) => ({ category: `forbidden ${usage.api}`, line: usage.line }))
+    ? forbidden.usages.map((usage) => ({
+        category: `forbidden ${usage.api}`,
+        line: usage.line,
+        launchCheck: true,
+      }))
     : [];
 }
 
@@ -72,7 +79,10 @@ export function scriptFindings(source: string): ScriptFindings {
     warnings: [],
   };
   if (!calls.ok)
-    return { ...found, failures: [...found.failures, { category: 'syntax', line: calls.line }] };
+    return {
+      ...found,
+      failures: [...found.failures, { category: 'syntax', line: calls.line, launchCheck: true }],
+    };
 
   found.failures.push(...callFindings(calls));
   if (meta.titles) {
