@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
+import { retryOnWindowsLock } from './file-retry.js';
 import type { Target } from './frontmatter.js';
 import { isMapping } from './frontmatter.js';
 import type { Scope } from './targets.js';
@@ -170,7 +171,8 @@ export async function writeLedger(
     if (pendingWrites.get(path) === write) pendingWrites.delete(path);
   }
   // Only after the ledger is safely at its new location is the old one retired.
-  if (legacyPath !== undefined && legacyPath !== path) await rm(legacyPath, { force: true });
+  if (legacyPath !== undefined && legacyPath !== path)
+    await retryOnWindowsLock(() => rm(legacyPath, { force: true }));
 }
 
 async function replaceLedger(path: string, ledger: Ledger): Promise<void> {
@@ -185,7 +187,7 @@ async function replaceLedger(path: string, ledger: Ledger): Promise<void> {
       flag: 'wx',
     });
     await chmod(temporary, 0o600);
-    await rename(temporary, path);
+    await retryOnWindowsLock(() => rename(temporary, path));
   } catch (cause) {
     await rm(temporary, { force: true });
     throw cause;

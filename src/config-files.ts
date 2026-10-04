@@ -1,6 +1,7 @@
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
+import { retryOnWindowsLock } from './file-retry.js';
 import { withoutByteOrderMark } from './byte-order-mark.js';
 import { isMapping } from './frontmatter.js';
 
@@ -33,7 +34,9 @@ export async function readJsonConfig(path: string): Promise<Record<string, unkno
 /** Write a JSON config file with the project's 2-space formatting. */
 export async function writeJsonConfig(path: string, value: unknown): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, `${JSON.stringify(value, undefined, 2)}\n`, 'utf8');
+  await retryOnWindowsLock(() =>
+    writeFile(path, `${JSON.stringify(value, undefined, 2)}\n`, 'utf8'),
+  );
 }
 
 /** Copy `path` to `path.skillset-backup` once per run (tracked via `backedUp`). */
@@ -41,7 +44,7 @@ export async function backupOnce(path: string, backedUp: Set<string>): Promise<v
   if (backedUp.has(path)) return;
 
   backedUp.add(path);
-  await copyFile(path, `${path}.skillset-backup`).catch(() => {
+  await retryOnWindowsLock(() => copyFile(path, `${path}.skillset-backup`)).catch(() => {
     // Nothing to back up when the file does not exist yet.
   });
 }

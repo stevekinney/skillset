@@ -3,6 +3,7 @@ import { dirname } from 'node:path';
 
 import { parse as parseToml } from 'smol-toml';
 
+import { retryOnWindowsLock } from './file-retry.js';
 import { withoutByteOrderMark } from './byte-order-mark.js';
 import {
   backupOnce,
@@ -155,7 +156,7 @@ async function applyCodexDefaults(
   }
 
   await mkdir(dirname(file), { recursive: true });
-  await writeFile(file, contents, 'utf8');
+  await retryOnWindowsLock(() => writeFile(file, contents, 'utf8'));
 }
 
 /**
