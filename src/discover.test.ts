@@ -176,8 +176,9 @@ describe('symlink aliases and unreadable targets', () => {
   });
 
   it('surfaces a target it cannot read, instead of treating it as a broken link', async () => {
-    // POSIX permissions only: Windows has no mode bits to deny.
-    if (process.platform === 'win32') return;
+    // POSIX permissions only: Windows has no mode bits to deny, and root (common
+    // in containers) reads through them anyway, so neither can produce the error.
+    if (process.platform === 'win32' || process.getuid?.() === 0) return;
     const root = await makeRoot();
     await mkdir(join(root, 'agents'), { recursive: true });
     await mkdir(join(root, 'locked'), { recursive: true });
