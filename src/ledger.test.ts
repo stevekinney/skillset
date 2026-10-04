@@ -262,3 +262,15 @@ describe('a ledger with no old location to retire', () => {
     expect(entries).toEqual(['state.json']);
   });
 });
+
+describe('a first run with no ledger anywhere', () => {
+  it('starts empty when neither the new nor the old ledger exists', async () => {
+    const path = await makePath();
+    const ledger = await readLedger(
+      path,
+      { claudeMcpConfig: '/c', codexMcpConfig: '/x' },
+      join(dirname(path), 'old.json'),
+    );
+    expect(ledger).toEqual({ version: 2, items: {} });
+  });
+});
