@@ -293,3 +293,55 @@ describe('mcp command', () => {
     expect(await served).toBe(0);
   });
 });
+
+describe('config directory overrides', () => {
+  it('syncs into CLAUDE_CONFIG_DIR and CODEX_HOME instead of the defaults', async () => {
+    const fixture = await makeFixture();
+    await addSkill(fixture, 'demo', validSkill);
+    await addAgent(fixture, 'reviewer', validAgent);
+    const claudeHome = join(fixture.root, 'claude-config');
+    const codexHome = join(fixture.root, 'codex-home');
+    // Codex requires an explicitly set CODEX_HOME to exist already.
+    await mkdir(codexHome);
+
+    const code = await runCli(['sync'], {
+      ...fixture.dependencies,
+      env: { NODE_ENV: 'test', CLAUDE_CONFIG_DIR: claudeHome, CODEX_HOME: codexHome },
+    });
+
+    expect(code).toBe(0);
+    expect(await Bun.file(join(claudeHome, 'skills', 'demo', 'SKILL.md')).exists()).toBe(true);
+    expect(await Bun.file(join(claudeHome, 'agents', 'reviewer.md')).exists()).toBe(true);
+    expect(await Bun.file(join(codexHome, 'agents', 'reviewer.toml')).exists()).toBe(true);
+    expect(
+      await Bun.file(join(fixture.home, '.agents', 'skills', 'demo', 'SKILL.md')).exists(),
+    ).toBe(true);
+    expect(await exists(join(fixture.home, '.claude'))).toBe(false);
+    expect(await exists(join(fixture.home, '.codex'))).toBe(false);
+    expect(await exists(claudeHome)).toBe(true);
+  });
+});
+
+describe('relative CLAUDE_CONFIG_DIR', () => {
+  it('fails with a clear message instead of writing somewhere Claude Code never reads', async () => {
+    const fixture = await makeFixture();
+    await addSkill(fixture, 'demo', validSkill);
+    const code = await runCli(['sync'], {
+      ...fixture.dependencies,
+      env: { NODE_ENV: 'test', CLAUDE_CONFIG_DIR: 'relative-config' },
+    });
+    expect(code).toBe(1);
+    expect(fixture.lines.join('\n')).toContain('CLAUDE_CONFIG_DIR must be an absolute path');
+  });
+
+  it('does not affect project scope, which ignores the overrides', async () => {
+    const fixture = await makeFixture();
+    await addSkill(fixture, 'demo', validSkill);
+    const code = await runCli(['sync', '--scope', 'project'], {
+      ...fixture.dependencies,
+      env: { NODE_ENV: 'test', CLAUDE_CONFIG_DIR: 'relative-config' },
+    });
+    expect(code).toBe(0);
+    expect(await exists(join(fixture.root, '.claude', 'skills', 'demo', 'SKILL.md'))).toBe(true);
+  });
+});

@@ -99,7 +99,9 @@ jobs:
 
       # Bun cross-compiles every target from a single Linux runner.
       - name: Compile executable
-        run: bun build ./src/bin.ts --compile --minify --target=${{ matrix.target }} --outfile binaries/${{ matrix.asset }}
+        # No .env or bunfig.toml autoloading: the tools read CLAUDE_CONFIG_DIR and
+        # CODEX_HOME only from the real environment, and so must skillset.
+        run: bun build ./src/bin.ts --compile --minify --no-compile-autoload-dotenv --no-compile-autoload-bunfig --target=${{ matrix.target }} --outfile binaries/${{ matrix.asset }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
