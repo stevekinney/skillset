@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { basename } from 'node:path';
+import { resolve } from 'node:path';
 
 import { claudeWorkflowAgentOptionsSchema } from '../src/claude-workflow-agent-options.js';
 import {
@@ -123,7 +123,7 @@ export async function checkScripts(
   executed: Set<string>,
 ) {
   for (const { path, session } of files) {
-    const ran = !session || executed.has(basename(path)) || /-wf_[a-z0-9-]+\.js$/.test(path);
+    const ran = !session || executed.has(resolve(path)) || /-wf_[a-z0-9-]+\.js$/.test(path);
     count(ran ? 'saved scripts' : 'files in a scripts directory that no run executed');
     const found = scriptFindings(await readFile(path, 'utf8'));
     report(

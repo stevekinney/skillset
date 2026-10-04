@@ -31,15 +31,16 @@ export const claudeWorkflowOutputSchemaSchema = z
     additionalProperties: z.union([z.boolean(), z.record(z.string(), z.unknown())]).optional(),
   })
   .superRefine((schema, context) => {
+    // A required key missing from `properties` can still arrive as an additional
+    // property; only `additionalProperties: false` makes it a contradiction, the
+    // one Claude Code proves before starting the agent.
+    if (schema.additionalProperties !== false) return;
     for (const key of schema.required ?? []) {
       if (Object.hasOwn(schema.properties, key)) continue;
       context.addIssue({
         code: 'custom',
         path: ['required'],
-        message:
-          schema.additionalProperties === false
-            ? `required key "${key}" is not in properties, which additionalProperties: false rules out`
-            : `required key "${key}" is not in properties`,
+        message: `required key "${key}" is not in properties, which additionalProperties: false rules out`,
       });
     }
   });

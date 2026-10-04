@@ -101,14 +101,13 @@ describe('claudeWorkflowOutputSchemaSchema', () => {
     expect(claudeWorkflowOutputSchemaSchema.safeParse({ type: 'object' }).success).toBe(false);
   });
 
-  it('rejects a required key missing from properties', () => {
-    const plain = claudeWorkflowOutputSchemaSchema.safeParse({
+  it('rejects a required key missing from properties only when additionalProperties is false', () => {
+    const open = claudeWorkflowOutputSchemaSchema.safeParse({
       type: 'object',
       properties: { a: {} },
       required: ['a', 'b'],
     });
-    expect(plain.success).toBe(false);
-    expect(plain.error?.issues[0]?.message).toBe('required key "b" is not in properties');
+    expect(open.success).toBe(true);
 
     const closed = claudeWorkflowOutputSchemaSchema.safeParse({
       type: 'object',
@@ -285,5 +284,19 @@ describe('disallowedTools names', () => {
     expect(
       claudeWorkflowAgentOptionsSchema.safeParse({ disallowedTools: [' Bash '] }).success,
     ).toBe(true);
+  });
+});
+
+describe('required keys outside properties', () => {
+  it('are allowed unless additionalProperties is false, the only contradiction', () => {
+    const schema = { type: 'object', properties: {}, required: ['id'] };
+    expect(claudeWorkflowOutputSchemaSchema.safeParse(schema).success).toBe(true);
+    expect(
+      claudeWorkflowOutputSchemaSchema.safeParse({ ...schema, additionalProperties: true }).success,
+    ).toBe(true);
+    expect(
+      claudeWorkflowOutputSchemaSchema.safeParse({ ...schema, additionalProperties: false })
+        .success,
+    ).toBe(false);
   });
 });

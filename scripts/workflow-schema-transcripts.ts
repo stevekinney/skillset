@@ -1,6 +1,6 @@
 import { createReadStream } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { basename } from 'node:path';
+import { resolve } from 'node:path';
 
 import { claudeWorkflowRunRecordSchema } from '../src/claude-workflow-run-record.js';
 import {
@@ -31,7 +31,8 @@ export async function checkRecords(files: string[]): Promise<Set<string>> {
       ))
         note(failures, issue.category, location);
       const scriptPath = isObject(record) ? record['scriptPath'] : undefined;
-      if (typeof scriptPath === 'string') executed.add(basename(scriptPath));
+      // Keyed by full path: same-named scripts in two sessions are different files.
+      if (typeof scriptPath === 'string') executed.add(resolve(scriptPath));
     } catch {
       note(failures, 'run record: invalid JSON', location);
     }
@@ -111,7 +112,7 @@ function checkToolUse(
 
 function checkToolOutput(record: Record<string, unknown>, location: string) {
   const result = record['toolUseResult'];
-  if (!isObject(result) || typeof result['taskId'] !== 'string') return;
+  if (!isObject(result)) return;
   for (const issue of schemaFindings(
     'Workflow tool output (transcript)',
     claudeWorkflowToolOutputSchema,
@@ -124,17 +125,33 @@ function checkTranscriptRecord(
   record: Record<string, unknown>,
   location: string,
   pending: Map<string, Pending>,
+  workflowCalls: Set<string>,
 ) {
-  for (const block of contentBlocks(record))
-    if (isObject(block) && block['type'] === 'tool_use' && block['name'] === 'Workflow')
+  for (const block of contentBlocks(record)) {
+    if (isObject(block) && block['type'] === 'tool_use' && block['name'] === 'Workflow') {
+      workflowCalls.add(String(block['id']));
       checkToolUse(block, location, pending);
-  if (typeof record['toolUseResult'] === 'object' && 'status' in (record['toolUseResult'] ?? {}))
+    }
+  }
+  // A result is a Workflow output when it answers a Workflow call. Matching on
+  // the call, not the result's fields, validates a malformed result (no taskId,
+  // say) instead of skipping it, and leaves out the Agent tool's background
+  // launches, which also report status "async_launched".
+  for (const block of contentBlocks(record)) {
+    if (!isObject(block) || block['type'] !== 'tool_result') continue;
+    const id = String(block['tool_use_id']);
+    if (!workflowCalls.delete(id)) continue;
     checkToolOutput(record, location);
+  }
   checkVerdict(record, pending);
 }
 
 /** Whether a line can hold a Workflow call, or the result of one still awaiting its verdict. */
-function isRelevant(line: string, pending: Map<string, Pending>): boolean {
+function isRelevant(
+  line: string,
+  pending: Map<string, Pending>,
+  workflowCalls: Set<string>,
+): boolean {
   // Both launch statuses are Workflow tool outputs: a local run and a remote one.
   if (
     line.includes('"name":"Workflow"') ||
@@ -143,20 +160,21 @@ function isRelevant(line: string, pending: Map<string, Pending>): boolean {
   ) {
     return true;
   }
-  return pending.size > 0 && line.includes('"tool_result"');
+  return (pending.size > 0 || workflowCalls.size > 0) && line.includes('"tool_result"');
 }
 
 export async function checkTranscripts(files: string[]) {
   for (const file of files) {
     const pending = new Map<string, Pending>();
+    const workflowCalls = new Set<string>();
     let lineNumber = 0;
     for await (const line of readLines(file)) {
       lineNumber += 1;
-      if (!isRelevant(line, pending)) continue;
+      if (!isRelevant(line, pending, workflowCalls)) continue;
       try {
         const record: unknown = JSON.parse(line);
         if (isObject(record))
-          checkTranscriptRecord(record, `${display(file)}:${lineNumber}`, pending);
+          checkTranscriptRecord(record, `${display(file)}:${lineNumber}`, pending, workflowCalls);
       } catch {
         count('transcript lines that were not JSON');
       }

@@ -146,3 +146,57 @@ describe('values held in top-level constants and quoted keys', () => {
     expect(result.phases.map((phase) => phase.title)).toEqual(['Scan']);
   });
 });
+
+describe('option values a later property may replace', () => {
+  it('keeps only values no later unresolved spread or computed key can overwrite', () => {
+    const result = extractClaudeWorkflowCalls(
+      "const extra = make()\nagent('x', { effort: 'bogus', ...extra, label: 'kept' })",
+    );
+    if (!result.ok) throw new Error('expected the script to parse');
+    expect(result.agents.map((agent) => agent.options)).toEqual([{ label: 'kept' }]);
+    expect(result.agents.map((agent) => agent.unresolvedProperties)).toEqual([1]);
+  });
+});
+
+describe('locally shadowed workflow globals', () => {
+  it('ignores calls to a parameter, block binding, catch binding, or loop binding with a global name', () => {
+    const result = extractClaudeWorkflowCalls(
+      [
+        "function run(agent) { agent('x', { effort: 'bogus' }) }",
+        "const go = ({ phase }) => phase('Shadowed')",
+        "{ const workflow = () => 1; workflow('not-a-reference') }",
+        "try { run() } catch (agent) { agent('y') }",
+        "for (const phase of []) { phase('Loop') }",
+        "agent('real', { phase: 'Real' })",
+      ].join('\n'),
+    );
+    if (!result.ok) throw new Error('expected the script to parse');
+    expect(result.agents.map((agent) => agent.options)).toEqual([{ phase: 'Real' }]);
+    expect(result.phases.map((phase) => phase.title)).toEqual(['Real']);
+    expect(result.workflowReferences).toEqual([]);
+  });
+
+  it('ignores every call when a top-level declaration shadows the global', () => {
+    const result = extractClaudeWorkflowCalls(
+      "const agent = () => 1\nagent('x', { effort: 'bogus' })",
+    );
+    if (!result.ok) throw new Error('expected the script to parse');
+    expect(result.agents).toEqual([]);
+  });
+});
+
+describe('shadowing through every binding pattern', () => {
+  it('treats default, rest, array, and object-rest bindings as shadowing', () => {
+    const result = extractClaudeWorkflowCalls(
+      [
+        "function a(agent = 1) { agent('x', { effort: 'bogus' }) }",
+        "function b(...agent) { agent('x', { effort: 'bogus' }) }",
+        "function c([agent]) { agent('x', { effort: 'bogus' }) }",
+        "function d({ ...agent }) { agent('x', { effort: 'bogus' }) }",
+        "function e({ nested: [agent] }) { agent('x', { effort: 'bogus' }) }",
+      ].join('\n'),
+    );
+    if (!result.ok) throw new Error('expected the script to parse');
+    expect(result.agents).toEqual([]);
+  });
+});

@@ -7,10 +7,10 @@ import {
   nodeLocation,
   parseWorkflowProgram,
   topLevelConstants,
-  walkWorkflowNodes,
   type WorkflowIdentifierResolver,
   type WorkflowNode,
 } from './claude-workflow-ast.js';
+import { walkWorkflowGlobalCalls } from './claude-workflow-scope.js';
 
 /**
  * Finds the calls a workflow script makes to its globals, and evaluates each
@@ -53,14 +53,23 @@ export type ClaudeWorkflowCalls =
 
 /** Evaluate an options object property by property, so one computed value costs only itself. */
 function evaluateOptions(node: WorkflowNode, resolve: WorkflowIdentifierResolver) {
-  const options: Record<string, unknown> = {};
+  let options: Record<string, unknown> = {};
   let unresolvedProperties = 0;
   for (const property of childNodes(node, 'properties')) {
+    const value = property ? childNode(property, 'value') : undefined;
+    const name = property?.type === 'Property' ? propertyNameOrUndefined(property) : undefined;
+    if (name === undefined || !value) {
+      // A spread or computed key can overwrite any key set before it, so those
+      // values are no longer known; only later properties are final.
+      options = {};
+      unresolvedProperties += 1;
+      continue;
+    }
     try {
-      const value = property ? childNode(property, 'value') : undefined;
-      if (property?.type !== 'Property' || !value) throw new TypeError('not a plain property');
-      options[literalPropertyName(property)] = evaluateWorkflowLiteral(value, resolve);
+      options[name] = evaluateWorkflowLiteral(value, resolve);
     } catch {
+      // A non-literal value leaves only its own key unknown.
+      delete options[name];
       unresolvedProperties += 1;
     }
   }
@@ -120,6 +129,9 @@ function resolvedOptions(
   return argument?.type === 'Identifier' ? resolve(identifierName(argument) ?? '') : argument;
 }
 
+/** The script globals whose calls are extracted. */
+const workflowCallGlobals: ReadonlySet<string> = new Set(['agent', 'phase', 'workflow']);
+
 function recordCall(found: Found, call: WorkflowNode, resolve: WorkflowIdentifierResolver) {
   const name = identifierName(childNode(call, 'callee'));
   const [first, second] = childNodes(call, 'arguments');
@@ -159,9 +171,9 @@ export function extractClaudeWorkflowCalls(source: string): ClaudeWorkflowCalls 
     workflowReferencesUnresolved: 0,
     phases: [],
   };
-  walkWorkflowNodes(parsed.program, (node) => {
-    if (node.type === 'CallExpression') recordCall(found, node, resolve);
-  });
+  walkWorkflowGlobalCalls(parsed.program, workflowCallGlobals, (call) =>
+    recordCall(found, call, resolve),
+  );
   return found;
 }
 

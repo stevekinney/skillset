@@ -21,7 +21,7 @@ export type WorkflowParseResult =
   | { ok: true; program: WorkflowNode }
   | { ok: false; message: string; line?: number; column?: number };
 
-function isNode(value: unknown): value is WorkflowNode {
+export function isNode(value: unknown): value is WorkflowNode {
   return (
     typeof value === 'object' && value !== null && 'type' in value && typeof value.type === 'string'
   );
