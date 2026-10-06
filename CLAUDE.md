@@ -52,7 +52,8 @@ bun run package:check    # Run publint + @arethetypeswrong/cli on packed tarball
 - `entry-hooks.ts` / `entry-sessions.ts` / `entry-workflows.ts` — the `./hooks`, `./sessions`, and `./workflows` subpath entry points. Each re-exports a slice of `index.ts`; `public-api.test.ts` checks each is a subset of the root, and the build uses `splitting` so they share one copy of each schema and error class.
 - `frontmatter.ts` — Claude Code's and Codex's SKILL.md frontmatter schemas, `agents/openai.yaml`, the two effort schemas, and `parseClaudeSkillMapping`/`parseCodexSkillMapping`.
 - `agent-frontmatter.ts` — Claude Code's subagent frontmatter schema, the Codex agent file schema (loose: it may carry any config.toml key), and `parseClaudeAgentMapping`.
-- `validate-metadata.ts` — `validateSkillMetadata`/`validateSubagentMetadata`: parse one file with gray-matter (executable engines disabled), validate against the target tool's schema, then run the rules in `doctor.ts`.
+- `validate-metadata.ts` — `validateSkillMetadata`/`validateSubagentMetadata`: split one file with `splitFrontmatterBlock` from `frontmatter-block.ts` (gray-matter 4's splitting rules, js-yaml's safe loader, executable fences refused, no Node APIs so it runs in browsers), validate against the target tool's schema, then run the rules in `doctor.ts`.
+- `frontmatter-block.ts` — `splitFrontmatterBlock`, which splits a file at its `---` fences exactly as gray-matter 4 did, without gray-matter's `Buffer` use. `frontmatter-block.test.ts` checks it against gray-matter (a dev dependency kept only for that comparison).
 - `doctor.ts` — naming, description, hook-field, unknown-key, and length rules for skills and subagents (`checkParsedSkill`/`checkParsedAgent`).
 - `doctor-anti-patterns.ts` — warnings for valid-but-suspect frontmatter (vague name, first-person description, `bypassPermissions`, a tool both allowed and denied).
 - `issue.ts` — the `Issue` type and its helpers.

@@ -1,8 +1,7 @@
-import matter from 'gray-matter';
-
 import { parseClaudeAgentMapping, type ClaudeAgentFrontmatter } from './agent-frontmatter.js';
 import { withoutByteOrderMark } from './byte-order-mark.js';
 import { checkParsedAgent, checkParsedSkill } from './doctor.js';
+import { splitFrontmatterBlock } from './frontmatter-block.js';
 import {
   isMapping,
   parseClaudeSkillMapping,
@@ -43,15 +42,10 @@ export type ValidateSubagentMetadataOptions = {
 type Split =
   { ok: true; mapping: Record<string, unknown>; body: string } | { ok: false; issue: Issue };
 
-/** Throws for the `---js` and `---coffee` fences, which gray-matter would otherwise `eval`. */
-function refuseExecutableFrontmatter(): never {
-  throw new Error('executable frontmatter is not allowed — use YAML');
-}
-
 /**
- * Split a file into its frontmatter mapping and body with gray-matter. The
- * executable engines are replaced so a `---js` block can never run code, and
- * passing options also bypasses gray-matter's content-keyed cache.
+ * Split a file into its frontmatter mapping and body. A `---js` block is
+ * refused rather than run, and nothing here needs Node, so this works in a
+ * browser too.
  */
 function split(content: string): Split {
   const text = withoutByteOrderMark(content);
@@ -59,26 +53,18 @@ function split(content: string): Split {
     return { ok: false, issue: error('missing YAML frontmatter (expected a leading `---` block)') };
   }
 
-  let file: matter.GrayMatterFile<string>;
+  let block: { data: unknown; body: string };
   try {
-    file = matter(text, {
-      engines: {
-        js: refuseExecutableFrontmatter,
-        javascript: refuseExecutableFrontmatter,
-        coffee: refuseExecutableFrontmatter,
-        coffeescript: refuseExecutableFrontmatter,
-        cson: refuseExecutableFrontmatter,
-      },
-    });
+    block = splitFrontmatterBlock(text);
   } catch (cause) {
     return { ok: false, issue: error(`invalid frontmatter — ${describeParseFailure(cause)}`) };
   }
 
-  if (!isMapping(file.data)) {
+  if (!isMapping(block.data)) {
     return { ok: false, issue: error('frontmatter must be a YAML mapping') };
   }
 
-  return { ok: true, mapping: file.data, body: file.content };
+  return { ok: true, mapping: block.data, body: block.body };
 }
 
 function validate<Parsed extends { frontmatter: unknown; body: string }>(
@@ -108,7 +94,7 @@ function validate<Parsed extends { frontmatter: unknown; body: string }>(
 /**
  * Validate the frontmatter of a SKILL.md file.
  *
- * Parses the YAML frontmatter with gray-matter and checks it against the chosen
+ * Parses the YAML frontmatter and checks it against the chosen
  * tool's schema: Claude Code's by default, where every field is optional, or
  * Codex's with `target: 'codex'`, where `name` and `description` are required.
  * Then it runs the naming and description rules and flags common anti-patterns,
@@ -149,7 +135,7 @@ export function validateSkillMetadata(
  * Validate the frontmatter of a Claude Code subagent definition
  * (`.claude/agents/<name>.md`).
  *
- * The same gray-matter parse as {@link validateSkillMetadata}, checked against
+ * The same frontmatter parse as {@link validateSkillMetadata}, checked against
  * Claude Code's subagent schema, plus the naming rules, inline `mcpServers`
  * items, hook fields, and anti-patterns such as an empty system prompt,
  * `bypassPermissions`, or a tool both allowed and denied. Never throws for a
