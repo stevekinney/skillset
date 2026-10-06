@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { agentFrontmatterSchema } from './agent-frontmatter.js';
+import { claudeAgentFrontmatterSchema, codexAgentSchema } from './agent-frontmatter.js';
 import { claudeAgentMcpServerSchema } from './agent-mcp-servers.js';
 import { claudeHookInputSchema, claudeHookInputSchemas } from './claude-hook-input-schemas.js';
 import { claudeHookOutputOrAsyncSchema } from './claude-hook-output-schemas.js';
@@ -35,26 +35,20 @@ import {
   codexSessionRecordSchemas,
   type CodexSessionRecordType,
 } from './codex-session-records.js';
-import { claudeSettingsEffortSchema, defaultsSourceSchema } from './defaults-config.js';
 import {
   claudeEffortSchema,
+  claudeSettingsEffortSchema,
+  claudeSkillFrontmatterSchema,
+  codexSkillFrontmatterSchema,
   openaiConfigurationSchema,
-  skillFrontmatterSchema,
 } from './frontmatter.js';
 import { claudeHookSettingsSchema, codexHookSettingsSchema } from './hook-schema.js';
-import { hooksSourceSchema } from './hooks-config.js';
-import { mcpSourceSchema } from './mcp-config.js';
-import {
-  claudeMcpOverrideSchema,
-  claudeMcpServerSchema,
-  codexMcpFieldsSchema,
-  codexMcpServerSchema,
-} from './mcp-schema.js';
+import { claudeMcpServerSchema, codexMcpServerSchema } from './mcp-schema.js';
 
 /**
  * A type guard backed by a schema. It narrows to the schema's *input* type:
  * a few schemas convert values while parsing (skill booleans accept `"yes"`,
- * some strings are trimmed, hooks.yaml handlers default `type`), so the value
+ * some strings are trimmed), so the value
  * being checked has the input shape, not the parsed one. For schemas that
  * convert nothing the two types are the same. Parse with the schema to get the
  * converted value.
@@ -63,11 +57,17 @@ function schemaGuard<Schema extends z.ZodType>(schema: Schema) {
   return (value: unknown): value is z.input<Schema> => schema.safeParse(value).success;
 }
 
-/** Whether a value is valid skill frontmatter (the union of both tools' fields). */
-export const isSkillFrontmatter = schemaGuard(skillFrontmatterSchema);
+/** Whether a value is valid Claude Code SKILL.md frontmatter. */
+export const isClaudeSkillFrontmatter = schemaGuard(claudeSkillFrontmatterSchema);
 
-/** Whether a value is valid subagent frontmatter (the union of both tools' fields). */
-export const isAgentFrontmatter = schemaGuard(agentFrontmatterSchema);
+/** Whether a value is valid Codex SKILL.md frontmatter. */
+export const isCodexSkillFrontmatter = schemaGuard(codexSkillFrontmatterSchema);
+
+/** Whether a value is valid Claude Code subagent frontmatter. */
+export const isClaudeAgentFrontmatter = schemaGuard(claudeAgentFrontmatterSchema);
+
+/** Whether a value is a valid Codex custom agent file, as parsed TOML. */
+export const isCodexAgent = schemaGuard(codexAgentSchema);
 
 /** Whether a value is a valid `agents/openai.yaml` configuration. */
 export const isOpenaiConfiguration = schemaGuard(openaiConfigurationSchema);
@@ -77,15 +77,6 @@ export const isClaudeEffort = schemaGuard(claudeEffortSchema);
 
 /** Whether a value is a valid Claude Code settings.json `effortLevel`. */
 export const isClaudeSettingsEffort = schemaGuard(claudeSettingsEffortSchema);
-
-/** Whether a value is a valid hooks.yaml source. */
-export const isHooksSource = schemaGuard(hooksSourceSchema);
-
-/** Whether a value is a valid mcp-servers.yaml source. */
-export const isMcpSource = schemaGuard(mcpSourceSchema);
-
-/** Whether a value is a valid defaults.yaml source. */
-export const isDefaultsSource = schemaGuard(defaultsSourceSchema);
 
 /** Whether a value is a valid Claude Code `hooks` block (settings.json, skill, or subagent). */
 export const isClaudeHookSettings = schemaGuard(claudeHookSettingsSchema);
@@ -99,19 +90,13 @@ export const isClaudeMcpServer = schemaGuard(claudeMcpServerSchema);
 /** Whether a value is a subagent `mcpServers` item Claude Code keeps. */
 export const isClaudeAgentMcpServer = schemaGuard(claudeAgentMcpServerSchema);
 
-/** Whether a value is a valid `claude:` override block of an mcp-servers.yaml server. */
-export const isClaudeMcpOverride = schemaGuard(claudeMcpOverrideSchema);
-
-/** Whether a value holds valid Codex MCP server fields (the `codex:` override block). */
-export const isCodexMcpFields = schemaGuard(codexMcpFieldsSchema);
-
 /** Whether a value is a valid Codex `[mcp_servers.<name>]` table. */
 export const isCodexMcpServer = schemaGuard(codexMcpServerSchema);
 
-/** Whether a value is a valid Codex subagent `skills` table. */
+/** Whether a value is a valid Codex `[skills]` table (config.toml or an agent file). */
 export const isCodexSkills = schemaGuard(codexSkillsSchema);
 
-/** Whether a value is a valid Codex subagent `tools` table. */
+/** Whether a value is a valid Codex `[tools]` table (config.toml or an agent file). */
 export const isCodexTools = schemaGuard(codexToolsSchema);
 
 /** Whether a value is a valid Claude Code hook stdin payload for any event. */

@@ -1,10 +1,8 @@
-import { parse, stringify } from 'yaml';
 import { z } from 'zod';
 
-import { withoutByteOrderMark } from './byte-order-mark.js';
 import { claudeHookSettingsSchema } from './hook-schema.js';
 
-/** The two tools this package compiles skills for. */
+/** The two tools this package describes. */
 export type Target = 'claude' | 'codex';
 
 const stringOrStringList = z.union([z.string(), z.array(z.string())]);
@@ -15,8 +13,7 @@ const CLAUDE_FALSE_SPELLINGS = new Set(['0', 'false', 'no', 'off']);
 /**
  * A skill boolean as Claude Code reads it (2.1.218+): a native boolean or
  * `1`/`true`/`yes`/`on` and `0`/`false`/`no`/`off`, trimmed and
- * case-insensitive. Normalized to a real boolean so every consumer, and the
- * emitted output, sees `true`/`false`.
+ * case-insensitive. Normalized to a real boolean.
  */
 const claudeSkillBoolean = z.preprocess((value) => {
   if (typeof value !== 'string' && typeof value !== 'number') return value;
@@ -35,6 +32,15 @@ export const claudeEffortSchema = z.union([
 ]);
 /** A Claude Code skill or subagent `effort` value. */
 export type ClaudeEffort = z.infer<typeof claudeEffortSchema>;
+
+/**
+ * Claude Code settings.json `effortLevel`: exactly these four. An invalid value
+ * is silently unset, and `max`, integers, and `ultracode` are rejected — a
+ * different set from skill and subagent `effort`.
+ */
+export const claudeSettingsEffortSchema = z.enum(['low', 'medium', 'high', 'xhigh']);
+/** A Claude Code settings.json `effortLevel` value. */
+export type ClaudeSettingsEffort = z.infer<typeof claudeSettingsEffortSchema>;
 
 const openaiInterfaceSchema = z.object({
   display_name: z.string().optional(),
@@ -74,28 +80,32 @@ export const openaiConfigurationSchema = z.object({
     .optional(),
   dependencies: z.object({ tools: z.array(openaiToolDependencySchema).optional() }).optional(),
 });
+/** The shape of an `agents/openai.yaml` file. */
+export type OpenaiConfiguration = z.infer<typeof openaiConfigurationSchema>;
 
 /**
- * The union of every frontmatter field either tool understands.
- *
- * Shared fields come from the agentskills.io spec and are emitted for both
- * targets. The Claude-only fields are emitted only into the Claude output.
- * The `openai` block is Codex-only and is emitted as `agents/openai.yaml`
- * rather than as SKILL.md frontmatter.
+ * Fields from the agentskills.io spec. Claude Code ignores the ones it does not
+ * document and Codex tolerates them, so both schemas accept them.
  */
-export const skillFrontmatterSchema = z.object({
-  // Shared (agentskills.io spec).
-  name: z.string(),
-  description: z.string(),
+const specFields = {
   license: z.string().optional(),
   compatibility: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   'allowed-tools': stringOrStringList.optional(),
+  arguments: stringOrStringList.optional(),
+};
 
-  // Claude Code only.
+/**
+ * SKILL.md frontmatter as Claude Code reads it. Every field is optional: `name`
+ * defaults to the skill's directory name, and `description` is recommended but
+ * not required.
+ */
+export const claudeSkillFrontmatterSchema = z.object({
+  name: z.string().optional(),
+  description: z.string().optional(),
+  ...specFields,
   when_to_use: z.string().optional(),
   'argument-hint': z.string().optional(),
-  arguments: stringOrStringList.optional(),
   'disable-model-invocation': claudeSkillBoolean.optional(),
   'user-invocable': claudeSkillBoolean.optional(),
   'disallowed-tools': stringOrStringList.optional(),
@@ -109,160 +119,72 @@ export const skillFrontmatterSchema = z.object({
   hooks: claudeHookSettingsSchema.optional(),
   paths: stringOrStringList.optional(),
   shell: z.enum(['bash', 'powershell']).optional(),
-
-  // Codex only — compiled to agents/openai.yaml.
-  openai: openaiConfigurationSchema.optional(),
 });
+/** Validated Claude Code SKILL.md frontmatter. */
+export type ClaudeSkillFrontmatter = z.infer<typeof claudeSkillFrontmatterSchema>;
 
-/** A validated union frontmatter block. */
-export type SkillFrontmatter = z.infer<typeof skillFrontmatterSchema>;
+/**
+ * SKILL.md frontmatter as Codex reads it. `name` and `description` are
+ * required. Codex consumes only those two and `metadata.short-description`;
+ * other keys are tolerated.
+ */
+export const codexSkillFrontmatterSchema = z.object({
+  name: z.string(),
+  description: z.string(),
+  ...specFields,
+});
+/** Validated Codex SKILL.md frontmatter. */
+export type CodexSkillFrontmatter = z.infer<typeof codexSkillFrontmatterSchema>;
 
-/** The shape of an emitted `agents/openai.yaml` file. */
-export type OpenaiConfiguration = z.infer<typeof openaiConfigurationSchema>;
+/**
+ * Keys a SKILL.md may carry without a warning. One SKILL.md is often shared by
+ * both tools, so Claude's keys count as known for Codex too; a key neither tool
+ * reads is unknown for both.
+ */
+const KNOWN_SKILL_KEYS = new Set<string>(Object.keys(claudeSkillFrontmatterSchema.shape));
 
-const CLAUDE_ONLY_KEYS = [
-  'when_to_use',
-  'argument-hint',
-  'disable-model-invocation',
-  'user-invocable',
-  'disallowed-tools',
-  'disallowedTools',
-  'model',
-  'effort',
-  'context',
-  'agent',
-  'background',
-  'hooks',
-  'paths',
-  'shell',
-] as const;
-
-// `name`/`description` are required by both tools; `arguments`/`allowed-tools`
-// are documented by both; `license`/`compatibility`/`metadata` come from the
-// agentskills.io spec (Claude Code ignores unknown keys, so they are harmless
-// there and meaningful to spec-following tools).
-const SHARED_KEYS = [
-  'name',
-  'description',
-  'license',
-  'compatibility',
-  'metadata',
-  'arguments',
-  'allowed-tools',
-] as const;
-
-const KNOWN_KEYS = new Set<string>([...SHARED_KEYS, ...CLAUDE_ONLY_KEYS, 'openai']);
-
-/** A SKILL.md file split into its frontmatter and markdown body. */
-export type ParsedSkillFile = {
-  frontmatter: SkillFrontmatter;
-  /** Top-level frontmatter keys neither tool understands. */
+/** A SKILL.md file split into validated frontmatter and its markdown body. */
+export type ParsedSkillFile<Frontmatter = ClaudeSkillFrontmatter> = {
+  frontmatter: Frontmatter;
+  /** Top-level frontmatter keys neither tool reads. */
   unknownKeys: string[];
   /** The markdown body after the closing frontmatter fence. */
   body: string;
 };
-
-const FRONTMATTER_PATTERN = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
-
-/**
- * Split any frontmatter-bearing markdown file into its raw YAML mapping and
- * body. Shared by the skill and agent parsers.
- *
- * @throws {Error} If the frontmatter fence is missing or the YAML is not a mapping.
- */
-export function splitFrontmatter(raw: string): { mapping: Record<string, unknown>; body: string } {
-  const text = withoutByteOrderMark(raw);
-  const match = FRONTMATTER_PATTERN.exec(text);
-  if (!match) throw new Error('missing YAML frontmatter (expected a leading `---` block)');
-
-  const parsed: unknown = parse(match[1]!);
-  if (!isMapping(parsed)) throw new Error('frontmatter must be a YAML mapping');
-
-  return { mapping: parsed, body: text.slice(match[0].length) };
-}
 
 /** Narrow an unknown value to a plain string-keyed mapping. */
 export function isMapping(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/**
- * Parse a raw SKILL.md file into validated frontmatter and a markdown body.
- *
- * @throws {Error} If the frontmatter fence is missing or the YAML is malformed.
- * @throws {z.ZodError} If the frontmatter fails the union schema.
- */
-export function parseSkillFile(raw: string): ParsedSkillFile {
-  const { mapping, body } = splitFrontmatter(raw);
-
-  return parseSkillMapping(mapping, body);
+function unknownSkillKeys(mapping: Record<string, unknown>): string[] {
+  return Object.keys(mapping).filter((key) => !KNOWN_SKILL_KEYS.has(key));
 }
 
 /**
- * Validate an already-parsed frontmatter mapping against the union schema.
+ * Validate a parsed frontmatter mapping as Claude Code's SKILL.md frontmatter.
  *
- * @throws {z.ZodError} If the mapping fails the union schema.
+ * @throws {z.ZodError} If the mapping fails the schema.
  */
-export function parseSkillMapping(mapping: Record<string, unknown>, body: string): ParsedSkillFile {
-  const frontmatter = skillFrontmatterSchema.parse(mapping);
-  const unknownKeys = Object.keys(mapping).filter((key) => !KNOWN_KEYS.has(key));
+export function parseClaudeSkillMapping(
+  mapping: Record<string, unknown>,
+  body: string,
+): ParsedSkillFile {
+  const frontmatter = claudeSkillFrontmatterSchema.parse(mapping);
 
-  return { frontmatter, unknownKeys, body };
-}
-
-function pick(frontmatter: SkillFrontmatter, keys: readonly string[]): Record<string, unknown> {
-  const record = frontmatter as Record<string, unknown>;
-  const result: Record<string, unknown> = {};
-
-  for (const key of keys) {
-    if (record[key] !== undefined) result[key] = record[key];
-  }
-
-  return result;
-}
-
-/** Project the union frontmatter onto the fields Claude Code understands. */
-export function claudeFrontmatter(frontmatter: SkillFrontmatter): Record<string, unknown> {
-  return pick(frontmatter, [...SHARED_KEYS, ...CLAUDE_ONLY_KEYS]);
-}
-
-/** Project the union frontmatter onto the fields Codex understands. */
-export function codexFrontmatter(frontmatter: SkillFrontmatter): Record<string, unknown> {
-  return pick(frontmatter, SHARED_KEYS);
+  return { frontmatter, unknownKeys: unknownSkillKeys(mapping), body };
 }
 
 /**
- * Build the `agents/openai.yaml` contents for the Codex output.
+ * Validate a parsed frontmatter mapping as Codex's SKILL.md frontmatter.
  *
- * `disable-model-invocation: true` implies `policy.allow_implicit_invocation:
- * false` (the closest Codex equivalent) unless the author set an explicit
- * `openai.policy`, which always wins. Returns `undefined` when there is
- * nothing to emit.
+ * @throws {z.ZodError} If the mapping fails the schema.
  */
-export function openaiConfiguration(
-  frontmatter: SkillFrontmatter,
-): OpenaiConfiguration | undefined {
-  const explicit = frontmatter.openai ?? {};
-  const policy =
-    explicit.policy ??
-    (frontmatter['disable-model-invocation'] ? { allow_implicit_invocation: false } : undefined);
+export function parseCodexSkillMapping(
+  mapping: Record<string, unknown>,
+  body: string,
+): ParsedSkillFile<CodexSkillFrontmatter> {
+  const frontmatter = codexSkillFrontmatterSchema.parse(mapping);
 
-  const configuration: OpenaiConfiguration = {};
-  if (explicit.interface) configuration.interface = explicit.interface;
-  if (policy) configuration.policy = policy;
-  if (explicit.dependencies) configuration.dependencies = explicit.dependencies;
-
-  if (Object.keys(configuration).length === 0) return undefined;
-
-  return configuration;
-}
-
-/** Serialize a frontmatter projection back to a fenced YAML block. */
-export function serializeFrontmatter(fields: Record<string, unknown>): string {
-  return `---\n${stringify(fields)}---\n`;
-}
-
-/** Serialize an `agents/openai.yaml` configuration to YAML. */
-export function serializeOpenaiConfiguration(configuration: OpenaiConfiguration): string {
-  return stringify(configuration);
+  return { frontmatter, unknownKeys: unknownSkillKeys(mapping), body };
 }

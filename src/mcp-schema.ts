@@ -96,23 +96,6 @@ const CLAUDE_ENTRY_SCHEMAS = new Map<string, z.ZodObject>([
   ['ws', claudeWebSocketSchema],
 ]);
 
-/**
- * The `claude:` block of an mcp-servers.yaml server: any field of any
- * authorable Claude transport, all optional. The merged entry is validated
- * against its transport afterwards, because the base fields decide which
- * transport the block lands on.
- */
-export const claudeMcpOverrideSchema = z
-  .looseObject({
-    type: z.enum(['stdio', 'sse', 'http', 'streamable-http', 'ws']),
-    ...stdioFields,
-    ...remoteFields,
-  })
-  .partial();
-
-/** The `claude:` override block of an mcp-servers.yaml server. */
-export type ClaudeMcpOverride = z.infer<typeof claudeMcpOverrideSchema>;
-
 function entryType(entry: Record<string, unknown>): string | undefined {
   return typeof entry['type'] === 'string' ? entry['type'] : undefined;
 }
@@ -153,6 +136,14 @@ export function claudeMcpEntryProblems(entry: Record<string, unknown>): McpProbl
   if (result.success) return [];
 
   return result.error.issues.map((issue) => ({ path: issue.path, message: issue.message }));
+}
+
+function unknownKeysOf(value: unknown, schema: z.ZodObject, prefix: string): string[] {
+  if (!isMapping(value)) return [];
+
+  return Object.keys(value)
+    .filter((key) => !(key in schema.shape))
+    .map((key) => `${prefix}.${key}`);
 }
 
 /** Fields of a Claude entry that its transport does not read, as dotted paths (`oauth.` keys included). */
@@ -226,11 +217,8 @@ const codexFields = {
   name: z.string().optional(),
 };
 
-/**
- * The `codex:` block of an mcp-servers.yaml server, and the field set of a
- * Codex section: every field optional, no transport rules applied yet.
- */
-export const codexMcpFieldsSchema = z.looseObject(codexFields);
+/** The field set of a Codex section: every field optional, no transport rules applied yet. */
+const codexMcpFieldsSchema = z.looseObject(codexFields);
 
 const STDIO_REJECTED_FIELDS = [
   'url',
@@ -249,10 +237,7 @@ function isBlank(value: string | undefined): boolean {
   return value !== undefined && value.trim().length === 0;
 }
 
-/** The fields a Codex `[mcp_servers.<name>]` table may hold, before transport rules apply. */
-export type CodexMcpFields = z.infer<typeof codexMcpFieldsSchema>;
-
-type CodexSection = CodexMcpFields;
+type CodexSection = z.infer<typeof codexMcpFieldsSchema>;
 type Reject = (field: string, message: string) => void;
 
 function isPresent(section: object, field: string): boolean {
@@ -326,62 +311,3 @@ export const codexMcpServerSchema = codexMcpFieldsSchema.superRefine((section, c
 
 /** A validated Codex `[mcp_servers.<name>]` table. */
 export type CodexMcpServer = z.infer<typeof codexMcpServerSchema>;
-
-/** Validate one Codex `[mcp_servers.<name>]` section. */
-export function codexMcpProblems(section: Record<string, unknown>): McpProblem[] {
-  const result = codexMcpServerSchema.safeParse(section);
-  if (result.success) return [];
-
-  return result.error.issues.map((issue) => ({ path: issue.path, message: issue.message }));
-}
-
-const CODEX_FIELD_HINTS = new Map([
-  [
-    'experimental_environment',
-    'Codex 0.160 renamed it to `environment_id` (the public docs still show the old name)',
-  ],
-]);
-
-/** An explanation for a well-known unknown Codex field, such as a renamed one. */
-export function codexUnknownFieldHint(field: string): string | undefined {
-  return CODEX_FIELD_HINTS.get(field);
-}
-
-function unknownKeysOf(value: unknown, schema: z.ZodObject, prefix: string): string[] {
-  if (!isMapping(value)) return [];
-
-  return Object.keys(value)
-    .filter((key) => !(key in schema.shape))
-    .map((key) => `${prefix}.${key}`);
-}
-
-/**
- * Fields of a Codex section that Codex does not read, as dotted paths. Beyond
- * the top level, Codex's published schema also rejects unknown keys in the
- * `oauth` table, object-form `env_vars` entries, and `tools.<tool>` tables.
- */
-export function unknownCodexMcpFields(section: Record<string, unknown>): string[] {
-  const unknown = Object.keys(section).filter(
-    (key) => key !== 'bearer_token' && !(key in codexMcpFieldsSchema.shape),
-  );
-
-  unknown.push(...unknownKeysOf(section['oauth'], codexOAuthSchema, 'oauth'));
-
-  const environmentVariables = section['env_vars'];
-  if (Array.isArray(environmentVariables)) {
-    environmentVariables.forEach((entry, index) => {
-      unknown.push(
-        ...unknownKeysOf(entry, codexEnvironmentVariableObjectSchema, `env_vars[${index}]`),
-      );
-    });
-  }
-
-  const tools = section['tools'];
-  if (isMapping(tools)) {
-    for (const [toolName, tool] of Object.entries(tools)) {
-      unknown.push(...unknownKeysOf(tool, codexToolSchema, `tools.${toolName}`));
-    }
-  }
-
-  return unknown;
-}

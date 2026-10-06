@@ -104,18 +104,18 @@ describe('public API', () => {
     const guards = Object.keys(publicApi).filter((name) => /^is[A-Z]/.test(name));
     expect(guards.toSorted()).toEqual(
       [
-        'isAgentFrontmatter',
+        'isClaudeAgentFrontmatter',
         'isClaudeAgentMcpServer',
         'isClaudeEffort',
         'isClaudeHookInput',
         'isClaudeHookInputFor',
         'isClaudeHookOutput',
         'isClaudeHookSettings',
-        'isClaudeMcpOverride',
         'isClaudeMcpServer',
         'isClaudeSessionRecord',
         'isClaudeSessionRecordFor',
         'isClaudeSettingsEffort',
+        'isClaudeSkillFrontmatter',
         'isClaudeWorkflowAgentOptions',
         'isClaudeWorkflowBudget',
         'isClaudeWorkflowJournalRecord',
@@ -125,21 +125,18 @@ describe('public API', () => {
         'isClaudeWorkflowRunRecord',
         'isClaudeWorkflowToolInput',
         'isClaudeWorkflowToolOutput',
+        'isCodexAgent',
         'isCodexHookInput',
         'isCodexHookInputFor',
         'isCodexHookOutputFor',
         'isCodexHookSettings',
-        'isCodexMcpFields',
         'isCodexMcpServer',
         'isCodexSessionRecord',
         'isCodexSessionRecordFor',
+        'isCodexSkillFrontmatter',
         'isCodexSkills',
         'isCodexTools',
-        'isDefaultsSource',
-        'isHooksSource',
-        'isMcpSource',
         'isOpenaiConfiguration',
-        'isSkillFrontmatter',
       ].toSorted(),
     );
   });
@@ -184,16 +181,6 @@ describe('public API', () => {
         }
       });
     }
-
-    it('keeps the CLI and the config-reading modules out of every entry point', async () => {
-      for (const name of entries) {
-        const entry: Record<string, unknown> = await import(`./entry-${name}.js`);
-
-        for (const forbidden of ['runCli', 'environment', 'runSync', 'validateSkillMetadata']) {
-          expect(entry[forbidden]).toBeUndefined();
-        }
-      }
-    });
 
     it('covers every hook, session, and workflow schema in some entry point', async () => {
       const hooks = Object.keys(await import('./entry-hooks.js'));

@@ -2,16 +2,17 @@ import { describe, expect, it } from 'bun:test';
 
 import {
   claudeMcpEntryProblems,
-  claudeMcpOverrideSchema,
-  codexMcpFieldsSchema,
   codexMcpServerSchema,
-  codexMcpProblems,
-  codexUnknownFieldHint,
   unknownClaudeMcpFields,
-  type ClaudeMcpOverride,
-  type CodexMcpFields,
-  unknownCodexMcpFields,
 } from './mcp-schema.js';
+
+function codexMcpProblems(
+  section: Record<string, unknown>,
+): { path: PropertyKey[]; message: string }[] {
+  const result = codexMcpServerSchema.safeParse(section);
+
+  return result.success ? [] : result.error.issues;
+}
 
 const messages = (problems: { path: PropertyKey[]; message: string }[]): string[] =>
   problems.map((problem) => `${problem.path.join('.')}: ${problem.message}`);
@@ -95,17 +96,6 @@ describe('unknownClaudeMcpFields', () => {
   it('reports nothing when the transport cannot be determined', () => {
     expect(unknownClaudeMcpFields({ type: 'sdk', name: 'x' })).toEqual([]);
     expect(unknownClaudeMcpFields({ url: 'x', mystery: 1 })).toEqual([]);
-  });
-});
-
-describe('claudeMcpOverrideSchema', () => {
-  it('types known fields and keeps unknown ones', () => {
-    expect(claudeMcpOverrideSchema.parse({ oauth: { callbackPort: 1 }, extra: true })).toEqual({
-      oauth: { callbackPort: 1 },
-      extra: true,
-    });
-    expect(() => claudeMcpOverrideSchema.parse({ timeout: 'soon' })).toThrow();
-    expect(() => claudeMcpOverrideSchema.parse({ type: 'carrier-pigeon' })).toThrow();
   });
 });
 
@@ -223,69 +213,23 @@ describe('codexMcpServerSchema', () => {
   });
 });
 
-describe('unknownCodexMcpFields', () => {
-  it('lists keys Codex does not read, excluding bearer_token', () => {
-    expect(
-      unknownCodexMcpFields({
-        command: 'x',
-        experimental_environment: 'remote',
-        mystery: 1,
-        bearer_token: 't',
-      }),
-    ).toEqual(['experimental_environment', 'mystery']);
-    expect(unknownCodexMcpFields({ command: 'x' })).toEqual([]);
-  });
-
-  it('hints at renamed fields', () => {
-    expect(codexUnknownFieldHint('experimental_environment')).toContain('environment_id');
-    expect(codexUnknownFieldHint('mystery')).toBeUndefined();
-  });
-});
-
-describe('codexMcpFieldsSchema', () => {
-  it('types overrides without requiring a transport', () => {
-    expect(codexMcpFieldsSchema.parse({ startup_timeout_sec: 5, extra: 1 })).toEqual({
+describe('codexMcpServerSchema fields', () => {
+  it('types known fields, keeps unknown ones, and requires a transport', () => {
+    expect(codexMcpServerSchema.parse({ command: 'x', startup_timeout_sec: 5, extra: 1 })).toEqual({
+      command: 'x',
       startup_timeout_sec: 5,
       extra: 1,
     });
-    expect(() => codexMcpFieldsSchema.parse({ required: 'yes' })).toThrow();
+    expect(() => codexMcpServerSchema.parse({ command: 'x', required: 'yes' })).toThrow();
     expect(codexMcpServerSchema.safeParse({}).success).toBe(false);
   });
 });
 
 describe('nested unknown fields', () => {
-  it('reports unknown keys inside Codex oauth, env_vars objects, and tools tables', () => {
-    expect(
-      unknownCodexMcpFields({
-        url: 'x',
-        oauth: { client_id: 'a', clientid: 'b' },
-        env_vars: ['PLAIN', { name: 'A', nme: 'b' }, { name: 'B' }],
-        tools: {
-          search: { approval_mode: 'auto', approval: 'x' },
-          other: { output_token_limit: 1 },
-        },
-      }),
-    ).toEqual(['oauth.clientid', 'env_vars[1].nme', 'tools.search.approval']);
-  });
-
-  it('ignores malformed nested containers', () => {
-    expect(unknownCodexMcpFields({ oauth: 'x', env_vars: 'x', tools: 'x' })).toEqual([]);
-    expect(unknownCodexMcpFields({ env_vars: [5], tools: { a: 5 } })).toEqual([]);
-  });
-
   it('reports unknown keys inside a Claude oauth object', () => {
     expect(
       unknownClaudeMcpFields({ type: 'http', url: 'x', oauth: { clientId: 'a', clientid: 'b' } }),
     ).toEqual(['oauth.clientid']);
     expect(unknownClaudeMcpFields({ type: 'http', url: 'x', oauth: 'x' })).toEqual([]);
-  });
-});
-
-describe('override types', () => {
-  it('describe the per-tool override blocks', () => {
-    const claude: ClaudeMcpOverride = { headersHelper: 'print-headers' };
-    const codex: CodexMcpFields = { startup_timeout_sec: 20 };
-    expect(claudeMcpOverrideSchema.parse(claude)).toEqual(claude);
-    expect(codexMcpFieldsSchema.parse(codex)).toEqual(codex);
   });
 });

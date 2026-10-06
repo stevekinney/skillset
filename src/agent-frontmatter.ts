@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
-import { claudeEffortSchema, splitFrontmatter } from './frontmatter.js';
 import { codexSkillsSchema, codexToolsSchema } from './codex-agent-tables.js';
+import { claudeEffortSchema } from './frontmatter.js';
 import { claudeHookSettingsSchema, codexHookSettingsSchema } from './hook-schema.js';
 import { codexMcpServerSchema } from './mcp-schema.js';
 
@@ -33,32 +33,12 @@ const nicknameCandidatesSchema = z
     message: 'nickname candidates must be unique',
   });
 
-const codexAgentSchema = z.object({
-  model: z.string().optional(),
-  // Model-dependent (Codex documents it as "a non-empty reasoning effort
-  // value advertised by the model"), so not an enum.
-  model_reasoning_effort: z.string().min(1).optional(),
-  model_verbosity: z.enum(['low', 'medium', 'high']).optional(),
-  sandbox_mode: z.enum(['read-only', 'workspace-write', 'danger-full-access']).optional(),
-  nickname_candidates: nicknameCandidatesSchema.optional(),
-  // Codex-native per-agent overrides, emitted verbatim as TOML tables. Codex
-  // documents these on its subagent TOML; their schemas differ from Claude's
-  // same-named frontmatter fields, so there is no automatic translation.
-  hooks: codexHookSettingsSchema.optional(),
-  mcp_servers: z.record(z.string(), codexMcpServerSchema).optional(),
-  skills: codexSkillsSchema.optional(),
-  tools: codexToolsSchema.optional(),
-});
-
 /**
- * The union of every agent frontmatter field either tool understands.
- *
- * Everything except the `codex` block is Claude Code's documented subagent
- * frontmatter. The `codex` block feeds the emitted `~/.codex/agents/<name>.toml`
- * (Codex model names are a different family, so they cannot be derived from
- * the Claude `model` field).
+ * A Claude Code subagent definition's frontmatter (`.claude/agents/<name>.md`).
+ * `name` and `description` are required; the markdown body is the agent's
+ * system prompt.
  */
-export const agentFrontmatterSchema = z.object({
+export const claudeAgentFrontmatterSchema = z.object({
   name: z.string(),
   description: z.string(),
   tools: stringOrStringList.optional(),
@@ -70,7 +50,7 @@ export const agentFrontmatterSchema = z.object({
   maxTurns: z.number().int().positive().optional(),
   skills: z.array(z.string()).optional(),
   // Any item: Claude Code drops an invalid item and still loads the agent, so
-  // doctor warns (via claudeAgentMcpItemProblems) instead of failing the parse.
+  // validation warns (via claudeAgentMcpItemProblems) instead of failing the parse.
   mcpServers: z.array(z.unknown()).optional(),
   hooks: claudeHookSettingsSchema.optional(),
   memory: z.enum(['user', 'project', 'local']).optional(),
@@ -87,120 +67,60 @@ export const agentFrontmatterSchema = z.object({
   observer: z.string().trim().min(1).optional(),
   observerMessage: z.string().optional(),
   observeSubagents: claudeAgentBoolean.optional(),
-
-  // Codex only — compiled to ~/.codex/agents/<name>.toml.
-  codex: codexAgentSchema.optional(),
 });
-
-/** A validated union agent frontmatter block. */
-export type AgentFrontmatter = z.infer<typeof agentFrontmatterSchema>;
-
-const CLAUDE_AGENT_KEYS = [
-  'name',
-  'description',
-  'tools',
-  'disallowedTools',
-  'model',
-  'permissionMode',
-  'maxTurns',
-  'skills',
-  'mcpServers',
-  'hooks',
-  'memory',
-  'background',
-  'effort',
-  'isolation',
-  'color',
-  'initialPrompt',
-  'omitClaudeMd',
-  'experimental',
-  'observer',
-  'observerMessage',
-  'observeSubagents',
-] as const;
-
-/** Claude fields with no documented Codex equivalent — dropped from the TOML. */
-export const CODEX_DROPPED_AGENT_KEYS = [
-  'maxTurns',
-  'memory',
-  'background',
-  'isolation',
-  'initialPrompt',
-  'omitClaudeMd',
-  'experimental',
-  'observer',
-  'observerMessage',
-  'observeSubagents',
-] as const;
+/** Validated Claude Code subagent frontmatter. */
+export type ClaudeAgentFrontmatter = z.infer<typeof claudeAgentFrontmatterSchema>;
 
 /**
- * Claude fields whose Codex counterpart exists but uses a different schema
- * (Codex agent TOML has its own `hooks`/`mcp_servers`/`skills` tables) — not
- * auto-translated; the author sets the matching `codex.*` key explicitly.
+ * A Codex custom agent file (`.codex/agents/<name>.toml`), as parsed TOML.
+ * `name`, `description`, and `developer_instructions` are required. The file
+ * may also carry any `config.toml` key, so unknown keys are kept rather than
+ * rejected. Codex 0.160 validates `mcp_servers`, `sandbox_mode`, `hooks`, and
+ * `tools` here but drops them when it loads the role.
  */
-export const CODEX_MANUAL_AGENT_KEYS = [
-  { claude: 'hooks', codex: 'hooks' },
-  { claude: 'mcpServers', codex: 'mcp_servers' },
-  { claude: 'skills', codex: 'skills' },
-] as const;
+export const codexAgentSchema = z.looseObject({
+  name: z.string(),
+  description: z.string(),
+  developer_instructions: z.string(),
+  model: z.string().optional(),
+  // Model-dependent (Codex documents it as "a non-empty reasoning effort
+  // value advertised by the model"), so not an enum.
+  model_reasoning_effort: z.string().min(1).optional(),
+  model_verbosity: z.enum(['low', 'medium', 'high']).optional(),
+  sandbox_mode: z.enum(['read-only', 'workspace-write', 'danger-full-access']).optional(),
+  nickname_candidates: nicknameCandidatesSchema.optional(),
+  // Codex's own per-agent tables. Their schemas match the global config.toml
+  // forms, not Claude's same-named frontmatter fields.
+  hooks: codexHookSettingsSchema.optional(),
+  mcp_servers: z.record(z.string(), codexMcpServerSchema).optional(),
+  skills: codexSkillsSchema.optional(),
+  tools: codexToolsSchema.optional(),
+});
+/** A validated Codex custom agent file. */
+export type CodexAgent = z.infer<typeof codexAgentSchema>;
 
-const KNOWN_AGENT_KEYS = new Set<string>([...CLAUDE_AGENT_KEYS, 'codex']);
+const KNOWN_AGENT_KEYS = new Set<string>(Object.keys(claudeAgentFrontmatterSchema.shape));
 
-/** An agent .md file split into validated frontmatter and its system-prompt body. */
+/** A Claude Code subagent file split into validated frontmatter and its body. */
 export type ParsedAgentFile = {
-  frontmatter: AgentFrontmatter;
-  /** Top-level frontmatter keys neither tool understands. */
+  frontmatter: ClaudeAgentFrontmatter;
+  /** Top-level frontmatter keys Claude Code does not read. */
   unknownKeys: string[];
   /** The markdown body — the agent's system prompt. */
   body: string;
 };
 
 /**
- * Parse a raw agent .md file into validated frontmatter and its body.
+ * Validate a parsed frontmatter mapping as Claude Code subagent frontmatter.
  *
- * @throws {Error} If the frontmatter fence is missing or the YAML is malformed.
- * @throws {z.ZodError} If the frontmatter fails the union schema.
+ * @throws {z.ZodError} If the mapping fails the schema.
  */
-export function parseAgentFile(raw: string): ParsedAgentFile {
-  const { mapping, body } = splitFrontmatter(raw);
-
-  return parseAgentMapping(mapping, body);
-}
-
-/**
- * Validate an already-parsed frontmatter mapping against the union schema.
- *
- * @throws {z.ZodError} If the mapping fails the union schema.
- */
-export function parseAgentMapping(mapping: Record<string, unknown>, body: string): ParsedAgentFile {
-  const frontmatter = agentFrontmatterSchema.parse(mapping);
+export function parseClaudeAgentMapping(
+  mapping: Record<string, unknown>,
+  body: string,
+): ParsedAgentFile {
+  const frontmatter = claudeAgentFrontmatterSchema.parse(mapping);
   const unknownKeys = Object.keys(mapping).filter((key) => !KNOWN_AGENT_KEYS.has(key));
 
   return { frontmatter, unknownKeys, body };
-}
-
-/** Project the union frontmatter onto the fields Claude Code understands. */
-export function claudeAgentFrontmatter(frontmatter: AgentFrontmatter): Record<string, unknown> {
-  const record = frontmatter as Record<string, unknown>;
-  const result: Record<string, unknown> = {};
-
-  for (const key of CLAUDE_AGENT_KEYS) {
-    if (record[key] !== undefined) result[key] = record[key];
-  }
-
-  return result;
-}
-
-/**
- * The `sandbox_mode` implied by a Claude `permissionMode` when the `codex`
- * block does not set one explicitly. Only `plan` and `acceptEdits` have a
- * documented mapping; other modes return `undefined` (doctor warns).
- */
-export function impliedSandboxMode(
-  permissionMode: AgentFrontmatter['permissionMode'],
-): 'read-only' | 'workspace-write' | undefined {
-  if (permissionMode === 'plan') return 'read-only';
-  if (permissionMode === 'acceptEdits') return 'workspace-write';
-
-  return undefined;
 }

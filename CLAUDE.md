@@ -7,7 +7,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Development
 
 ```bash
-bun run dev               # Start development with watch mode
 bun run build             # Build for production (outputs to dist/)
 bun ./dist/bun/index.js   # Run Bun-optimized build
 node ./dist/node/index.js # Run Node-compatible build
@@ -47,56 +46,33 @@ bun run package:check    # Run publint + @arethetypeswrong/cli on packed tarball
 
 ## Architecture Overview
 
-`skillset` is a CLI that compiles a single source root (cwd or `$SKILLSET_DIRECTORY`, containing `skills/`, `agents/`, `mcp-servers.yaml`, `instructions.md`, `hooks.yaml`, and/or `defaults.yaml`) into the per-tool formats for Claude Code and Codex, at user scope (`~/`) or project scope (`--scope project`). See `README.md` for source formats, destinations, templating, and fallback rules; `documentation/ui-readiness.md` for the JSON contracts and ledger design; `.claude/skills/tool-format-reference` for the verified facts about both tools' surfaces.
+`skillset` is a pure library: Zod schemas, type guards, and validators for Claude Code's and Codex's configuration and runtime formats. Nothing in `src/` reads or writes files, and nothing runs at import. See `README.md` for the public API and `.claude/skills/tool-format-reference` for the verified facts each schema encodes.
 
 ### Module Layout (`src/`)
 
-- `bin.ts` — executable entry (`skillset` bin); delegates to `cli.ts`.
-- `cli.ts` — command dispatch; all IO is injected via `CliDependencies` (cwd, env, homeDirectory, log, optional mcpTransport) so tests run in temp dirs without touching real stdio.
-- `invocation.ts` — `node:util` `parseArgs` argument parsing; per-command `--help` text lives in `help.ts`.
-- `help.ts` — comprehensive per-command help text (`commandHelp(name)`) plus the top-level `USAGE`.
+- `index.ts` — the public API. `public-api.test.ts` fails if a module exports a schema `index.ts` doesn't, if a public schema has no inferred type, or if any export is missing from `README.md`.
+- `entry-hooks.ts` / `entry-sessions.ts` / `entry-workflows.ts` — the `./hooks`, `./sessions`, and `./workflows` subpath entry points. Each re-exports a slice of `index.ts`; `public-api.test.ts` checks each is a subset of the root, and the build uses `splitting` so they share one copy of each schema and error class.
+- `frontmatter.ts` — Claude Code's and Codex's SKILL.md frontmatter schemas, `agents/openai.yaml`, the two effort schemas, and `parseClaudeSkillMapping`/`parseCodexSkillMapping`.
+- `agent-frontmatter.ts` — Claude Code's subagent frontmatter schema, the Codex agent file schema (loose: it may carry any config.toml key), and `parseClaudeAgentMapping`.
+- `validate-metadata.ts` — `validateSkillMetadata`/`validateSubagentMetadata`: parse one file with gray-matter (executable engines disabled), validate against the target tool's schema, then run the rules in `doctor.ts`.
+- `doctor.ts` — naming, description, hook-field, unknown-key, and length rules for skills and subagents (`checkParsedSkill`/`checkParsedAgent`).
+- `doctor-anti-patterns.ts` — warnings for valid-but-suspect frontmatter (vague name, first-person description, `bypassPermissions`, a tool both allowed and denied).
+- `issue.ts` — the `Issue` type and its helpers.
+- `hook-schema.ts` — both tools' hook event sets, Claude Code's hook settings schema (settings.json and skill/subagent frontmatter `hooks`), and Codex's hook handler and settings schema.
+- `mcp-schema.ts` — Claude Code's MCP server entry schema and Codex's `[mcp_servers.<name>]` schema with its transport rules.
+- `agent-mcp-servers.ts` — the subagent `mcpServers` item schema and the checks for items Claude Code drops.
+- `codex-agent-tables.ts` — Codex's `[skills]` and `[tools]` tables.
+- `claude-hook-shared.ts` / `claude-hook-input-schemas.ts` / `claude-hook-output-schemas.ts` / `codex-hook-payloads.ts` — schemas for every hook event's stdin input and stdout output (inputs loose, Codex outputs strict), with `parse*HookInput`/`parse*HookOutput` helpers.
 - `claude-session-*.ts` / `codex-session-*.ts` — Zod schemas for Claude Code session transcripts and Codex session rollouts (JSONL), checked against real sessions by `scripts/check-claude-session-schema.ts` and `scripts/check-codex-session-schema.ts` (`bun run check:claude-sessions` / `check:codex-sessions`).
 - `claude-workflow-*.ts` — Zod schemas, script-API types, and static helpers for Claude Code workflow scripts: `meta` (`claude-workflow-meta.ts`), `agent()` options and the output-schema root (`-agent-options.ts`), the Workflow tool input/output, `workflow()` reference, and `budget` (`-tool.ts`), the `wf_<id>.json` run record (`-run-record.ts`), acorn-based source helpers (`-ast.ts`, `-source.ts` for `meta` and forbidden APIs, `-calls.ts` for `agent()`/`workflow()`/`phase()` calls), and types for the script globals (`-script-api.ts`). `claude-workflow-globals.ts` declares those globals and is shipped as the `@lostgradient/skillset/workflow-globals` subpath; it must never be re-exported from `index.ts`, or `agent` and `pipeline` become globals for every consumer. Checked against real workflows by `scripts/check-workflow-schema.ts` (`bun run check:workflows`); `scripts/verify-package-types.ts` type-checks a plain JavaScript script against the shipped globals.
-- `type-guards.ts` — a schema-backed type guard for every public top-level schema (narrows to `z.input`); `public-api.test.ts` fails if a module exports a schema `index.ts` doesn't.
-- `mcp-server.ts` — exposes every CLI operation as an MCP tool (`createMcpServer`) served over stdio (`runMcpServer`); tool results reuse the same JSON shapes as `--json` CLI output.
-- `analysis.ts` — discovers + doctor-checks every source kind into one `Analysis`.
-- `commands.ts` — `list`/`show`/`new`/`remove`/`get`/`set` CRUD over sources.
-- `commands-run.ts` — `sync`, `doctor --targets`, and `import` orchestration.
-- `run-context.ts` — `RunContext` and `createRunContext`: the cwd, home, source root, and the tools' `CLAUDE_CONFIG_DIR`/`CODEX_HOME` a command runs with.
-- `discover.ts` — source-root resolution and enumeration of all six kinds.
-- `targets.ts` — `resolveTargets(scope, home, cwd, overrides?)`: every destination path for both tools at both scopes (honoring `CLAUDE_CONFIG_DIR`/`CODEX_HOME` at user scope), plus the ledger path.
-- `ledger.ts` — the sync ledger (v2): per-output hashes, timestamps, managed entries; v1 migration; `stableStringify`/`structurallyEqual`.
-- `drift.ts` — compares ledger items against disk (`clean`/`drift`/`missing`).
-- `frontmatter.ts` — skill union Zod schema, per-target projections, `agents/openai.yaml` derivation, shared `splitFrontmatter`/`isMapping`.
-- `agent-frontmatter.ts` / `agent-emit.ts` — agent union schema and Claude `.md` / Codex `.toml` emission.
-- `instructions.ts` — instructions.md conditional compile + `@import` checks.
-- `template.ts` — `<!-- #if claude/codex -->` conditional processing.
-- `fallback.ts` — Codex-only prose rewrites of Claude dynamic features.
-- `emit.ts` — skill compilation (frontmatter + body + generated marker + openai.yaml).
-- `doctor.ts` — skill and agent validation; errors block sync.
-- `doctor-anti-patterns.ts` — warnings for valid-but-suspect skill and agent frontmatter (vague name, first-person description, `bypassPermissions`, a tool both allowed and denied).
-- `validate-metadata.ts` — `validateSkillMetadata`/`validateSubagentMetadata`: parse one file with gray-matter (executable engines disabled), then run the doctor rules via `checkParsedSkill`/`checkParsedAgent`. Also warns when gray-matter and the `yaml` package read the block differently.
-- `entry-hooks.ts` / `entry-sessions.ts` / `entry-workflows.ts` — the `./hooks`, `./sessions`, and `./workflows` subpath entry points. They re-export a slice of `index.ts` and must never import `environment.ts` (the root reads config files at load). `public-api.test.ts` checks each is a subset of the root; the build uses `splitting` so they share one copy of each schema.
-- `hook-schema.ts` — both tools' hook event sets, Claude Code's hook settings schema (skill/agent frontmatter `hooks`), and Codex's hook handler and settings schema (`hooks.yaml` doctor, `codex.hooks`).
-- `agent-codex-checks.ts` — doctor checks for the agent `codex.hooks`/`codex.skills`/`codex.tools` tables.
-- `codex-agent-tables.ts` — Codex's `[skills]` and `[tools]` tables for the agent `codex:` block, plus their doctor helpers.
-- `mcp-schema.ts` — Claude Code's MCP server entry schema, Codex's `[mcp_servers.<name>]` schema, and the subagent `mcpServers` item schema (used by `mcp-servers.yaml` override blocks, agent frontmatter, and doctor).
-- `mcp-config.ts` / `hooks-config.ts` / `defaults-config.ts` — the three single-file source schemas and their per-target mappings.
-- `mcp-apply.ts` / `hooks-apply.ts` / `defaults-apply.ts` — surgical application to the shared config files, entry-level ledger ownership, backups.
-- `claude-hook-shared.ts` / `claude-hook-input-schemas.ts` / `claude-hook-output-schemas.ts` / `codex-hook-payloads.ts` — public Zod schemas for every hook event's stdin input and stdout output (inputs loose, Codex outputs strict), with `parse*HookInput`/`parse*HookOutput` helpers; exported from `index.ts` for hook authors.
-- `byte-order-mark.ts` — `withoutByteOrderMark`, which every reader of a user-editable file uses (JSON configs, frontmatter, `doctor --targets`).
-- `file-retry.ts` — `retryOnWindowsLock`: retries a write, rename, copy, or removal on Windows when another process briefly holds the file (`EPERM`/`EBUSY`/`EACCES`, about 1.5s of backoff); fails at once elsewhere. Only for files skillset alone owns (the ledger): retrying a write over a file another program may be changing can lose its changes, and retrying the copy that backs up a shared config would wait out a concurrent edit and then apply a stale plan.
-- `read-if-exists.ts` — `readIfExists`/`isMissingFile`: only a missing file reads as absent; any other read error throws, so a locked or unreadable config is never treated as empty and rewritten.
-- `config-files.ts` — shared JSON config read/write + backup helpers and the `EmbeddedAction` type.
-- `toml-splice.ts` — comment-preserving `[section]` and top-level-scalar splicing for `config.toml`.
-- `import.ts` — reverse-compiles installed skills/agents/instructions into sources.
-- `sync.ts` — plan/execute for the file-based kinds, marker ownership, drift skips, ledger recording.
+- `type-guards.ts` — a schema-backed type guard for every public top-level schema (narrows to `z.input`).
+- `byte-order-mark.ts` — `withoutByteOrderMark`, used before parsing any user-editable file.
 
 ### Core Design Principles
 
-1. **Environment-First Configuration**: All configuration resolves through `@lostgradient/environmentalist` with a Zod schema in `src/environment.ts` (env vars, dotenv, `skillset.config.*`). The `environment` object is the single source of truth.
+1. **Pure and side-effect free**: no filesystem, network, or environment access in `src/`, and nothing runs at import. Callers read files and pass in their text.
 
-2. **Marker + Ledger Ownership**: Sync only overwrites or prunes outputs it can prove it wrote — file outputs carry `GENERATED_MARKER`, config entries live in the ledger (`$XDG_CONFIG_HOME/skillset/state.json`, `%APPDATA%\skillset\state.json` on Windows, else `~/.config/skillset/state.json`; an old `~/.config` ledger is read until the next write retires it) with content hashes. Hand-installed files are skipped as unmanaged; hand-edited managed outputs are skipped as drifted; both need `--force`.
+2. **Verified, not guessed**: every schema field and rule comes from what the tool actually accepts (binary schemas, published schemas, docs). Follow `.claude/skills/tool-format-research` before adding or removing one, and record the result in `tool-format-reference`. Where acceptance is unverified, prefer a warning over an error.
 
 3. **Runtime-Neutral Published Code**: `src/` must not use Bun-only runtime APIs (`Bun.file`, `Bun.env`, `Bun.serve`, etc.). Those APIs are fine in `scripts/` and test files, but must not appear in published library output.
 
@@ -113,6 +89,7 @@ The build produces:
 - `dist/node/index.js` — ESM bundle, `Bun.build target: 'node'`, all deps external
 - `dist/bun/index.js` — ESM bundle, `Bun.build target: 'bun'`, all deps external
 - `dist/index.d.ts` — TypeScript declarations (shared)
+- `entry-hooks`, `entry-sessions`, `entry-workflows`, and `claude-workflow-globals` — the same for each subpath, with shared modules split into chunks
 
 The `exports` map in `package.json`:
 
@@ -158,15 +135,13 @@ There is no shared `src/types.ts` in this template. Add shared or domain-specifi
 
 ### Adding New Features
 
-1. **Environment variables**: Add to `.env.example` first, then update the schema in `src/environment.ts`.
+1. **Exports**: Export every new schema, its inferred type, and (for a top-level schema) a type guard from `index.ts`, and document each in `README.md`. `public-api.test.ts` enforces all three.
 2. **Types**: Domain-specific types live near their modules.
 
 ### Testing Approach
 
 - Tests use Bun's built-in test runner with `describe`, `it`, `expect`.
 - Test files are colocated with sources using the `.test.ts` suffix.
-- `test/sync-fixture.ts` holds the sync test fixture (temporary targets and sources, `temporaryDirectory`); register `removeSyncFixtures` in each file's `afterEach`.
-- `test/cli-fixture.ts` holds the CLI test fixture (temporary source root and home, `addSkill`/`addAgent`, a stat-based `exists`); register `removeFixtures` in each file's `afterEach`.
 - `test/setup.ts` is preloaded by `bunfig.toml` — it resets mocks and system time in `afterEach`. All tests get this automatically.
 - Oxlint rules are relaxed for test files. You can use `any`, non-null assertions, and other patterns normally flagged.
 - A separate `tsconfig.test.json` provides relaxed TypeScript settings for tests (checked by `bun run typecheck:test`).

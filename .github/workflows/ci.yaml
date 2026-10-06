@@ -49,19 +49,6 @@ jobs:
       # `validate` runs entirely under Bun. These steps exercise the emitted
       # Node bundles under the matrix Node version so the matrix is meaningful.
       - name: Smoke-test Node library build
-        run: node --input-type=module -e "import { runCli } from './dist/node/index.js'; if (typeof runCli !== 'function') { throw new Error('Node build smoke test failed'); }"
-
-      - name: Smoke-test Node CLI build
-        run: node ./dist/node/bin.js --help
-
-      # Releases ship standalone binaries for every OS; build and run one natively,
-      # with the same flags. A project's .env must not reach the binary: with a
-      # relative CLAUDE_CONFIG_DIR loaded from it, the dry run would fail.
-      - name: Smoke-test compiled binary
         run: |
-          bun build ./src/bin.ts --compile --no-compile-autoload-dotenv --no-compile-autoload-bunfig --outfile smoke/skillset
-          ./smoke/skillset --help
-          mkdir -p smoke/project/skills/demo smoke/home
-          printf -- '---\nname: demo\ndescription: A demo.\n---\n\nBody.\n' > smoke/project/skills/demo/SKILL.md
-          printf 'CLAUDE_CONFIG_DIR=relative-config\n' > smoke/project/.env
-          cd smoke/project && HOME="$PWD/../home" USERPROFILE="$PWD/../home" ../skillset sync --dry-run
+          node --input-type=module -e "import { validateSkillMetadata } from './dist/node/index.js'; if (!validateSkillMetadata('---\nname: demo\ndescription: A demo.\n---\nBody.\n').valid) { throw new Error('Node build smoke test failed'); }"
+          node --input-type=module -e "import { parseClaudeHookInput } from './dist/node/entry-hooks.js'; if (typeof parseClaudeHookInput !== 'function') { throw new Error('Node hooks entry smoke test failed'); }"

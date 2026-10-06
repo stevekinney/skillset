@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import type { Issue } from './doctor.js';
+import type { Issue } from './issue.js';
 import { isMapping } from './frontmatter.js';
 import {
   claudeMcpEntryProblems,
