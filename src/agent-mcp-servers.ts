@@ -49,7 +49,7 @@ export type ClaudeAgentMcpServer = z.infer<typeof claudeAgentMcpServerSchema>;
  * Why Claude Code would drop one subagent `mcpServers` item: it is either the
  * name of an already-configured server, or a mapping from a server name to a
  * full inline entry. Claude Code requires exactly one key per mapping at load
- * time rather than in its schema, so doctor reports that rule separately.
+ * time rather than in its schema, so validation reports that rule separately.
  */
 export function claudeAgentMcpItemProblems(item: unknown): McpProblem[] {
   if (typeof item === 'string') return [];

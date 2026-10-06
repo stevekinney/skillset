@@ -7,8 +7,7 @@ export type McpProblem = { path: PropertyKey[]; message: string };
 
 // Claude Code's MCP server entry, transcribed from the 2.1.288 binary's own
 // Zod definitions (verified October 2026). Objects are loose so fields Claude
-// Code does not read survive into the emitted output; doctor reports them as
-// warnings through unknownClaudeMcpFields. The internal `role` and
+// Code does not read survive parsing; unknownClaudeMcpFields lists them. The internal `role` and
 // `request_timeout_ms` fields are accepted but not validated, because Claude
 // Code itself coerces invalid values to undefined.
 const positiveInteger = z.number().int().positive();
@@ -161,7 +160,7 @@ export function unknownClaudeMcpFields(entry: Record<string, unknown>): string[]
 // Codex 0.160.0's `[mcp_servers.<name>]` table (verified October 2026 against
 // config.schema.json and mcp_types.rs at rust-v0.160.0). Unknown keys are
 // ignored at runtime but flagged by Codex's published JSON schema, so they are
-// kept and reported as doctor warnings.
+// kept rather than rejected.
 const codexApprovalMode = z.enum(['auto', 'prompt', 'writes', 'approve']);
 
 const codexEnvironmentVariableObjectSchema = z.looseObject({

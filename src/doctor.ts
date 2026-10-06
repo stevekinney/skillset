@@ -38,7 +38,15 @@ function windowsReservedName(name: string, kind: 'skill' | 'agent'): Issue[] {
     : [];
 }
 
-function checkName(name: string | undefined, directoryName: string | undefined): Issue[] {
+/**
+ * The agentskills.io naming rules apply to both tools; the reserved words are
+ * Claude's platform rule, so they are checked only for the `claude` target.
+ */
+function checkName(
+  name: string | undefined,
+  directoryName: string | undefined,
+  target: Target,
+): Issue[] {
   // Claude Code names a skill after its directory when `name` is absent.
   if (name === undefined) return [];
 
@@ -56,6 +64,7 @@ function checkName(name: string | undefined, directoryName: string | undefined):
     issues.push(error(`name \`${name}\` must match its directory name \`${directoryName}\``));
   }
   issues.push(...windowsReservedName(name, 'skill'));
+  if (target !== 'claude') return issues;
 
   for (const word of RESERVED_NAME_WORDS) {
     if (name.includes(word)) {
@@ -68,7 +77,8 @@ function checkName(name: string | undefined, directoryName: string | undefined):
   return issues;
 }
 
-function checkDescription(description: string | undefined): Issue[] {
+/** The no-XML-tags rule is Claude's platform rule, so it runs only for the `claude` target. */
+function checkDescription(description: string | undefined, target: Target): Issue[] {
   // Only Claude Code allows a missing description; Codex's schema requires it.
   if (description === undefined) {
     return [warning('description is missing — Claude Code decides when to use a skill from it')];
@@ -82,7 +92,7 @@ function checkDescription(description: string | undefined): Issue[] {
   if (description.length > MAXIMUM_DESCRIPTION_LENGTH) {
     issues.push(error(`description exceeds ${MAXIMUM_DESCRIPTION_LENGTH} characters`));
   }
-  if (XML_TAG_PATTERN.test(description)) {
+  if (target === 'claude' && XML_TAG_PATTERN.test(description)) {
     issues.push(error('description must not contain XML tags'));
   }
 
@@ -115,8 +125,8 @@ function checkLength(raw: string): Issue[] {
 /**
  * Run every check against a SKILL.md whose frontmatter already parsed.
  * `directoryName` is the folder the file sits in; without it the name/directory
- * match is skipped. Claude-only rules (hook fields, invocation settings) run
- * only for the `claude` target.
+ * match is skipped. Claude-only rules (reserved words, XML tags, hook fields,
+ * invocation settings) run only for the `claude` target.
  */
 export function checkParsedSkill(
   parsed: ParsedSkillFile<SkillFields>,
@@ -127,8 +137,8 @@ export function checkParsedSkill(
   const { name, description, hooks } = parsed.frontmatter;
 
   return [
-    ...checkName(name, directoryName),
-    ...checkDescription(description),
+    ...checkName(name, directoryName, target),
+    ...checkDescription(description, target),
     ...checkSkillAntiPatterns(parsed, target),
     ...(target === 'claude' ? checkHookFields(hooks) : []),
     ...checkUnknownKeys(parsed.unknownKeys, 'neither tool reads it'),

@@ -80,6 +80,15 @@ describe('skill rules', () => {
     );
   });
 
+  it('applies the Claude platform rules only for the Claude target', () => {
+    const raw = '---\nname: claude-pdf\ndescription: "Reads <pdf> files."\n---\nbody';
+    expect(messages(raw)).toEqual([
+      "warning: name contains reserved word `claude` — Claude's platform rejects it",
+      'error: description must not contain XML tags',
+    ]);
+    expect(messages(raw, undefined, 'codex')).toEqual([]);
+  });
+
   it('warns when SKILL.md exceeds 500 lines', () => {
     const body = Array.from({ length: 510 }, () => 'line').join('\n');
     expect(messages(`${valid}${body}`).join('\n')).toContain('keep it under 500');

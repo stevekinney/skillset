@@ -44,8 +44,7 @@ const sourceDirectory = import.meta.dir;
 
 /**
  * Source modules that export a schema. Selected by their text rather than by
- * importing everything, because some modules (the `bin.ts` entry point) run on
- * import.
+ * importing every module.
  */
 async function schemaModules(): Promise<string[]> {
   const files = await readdir(sourceDirectory);

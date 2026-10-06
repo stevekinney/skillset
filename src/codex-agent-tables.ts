@@ -4,7 +4,7 @@ import { z } from 'zod';
 // October 2026 against config.schema.json, skills_config.rs, and role.rs at
 // rust-v0.160.0). A role file is validated as a whole `config.toml`, so the
 // shapes below are the config.toml ones. Tables are loose so unknown keys
-// survive into the emitted TOML; doctor reports them as warnings.
+// survive parsing.
 
 const skillRuleSchema = z.looseObject({
   /** An absolute path, or one relative to the role file. */
