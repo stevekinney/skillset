@@ -37,6 +37,16 @@ describe('skill rules', () => {
     ]);
   });
 
+  it('applies the naming rules to the directory name when name is absent', () => {
+    expect(messages('---\ndescription: Does a thing.\n---\nBody.\n', 'Bad_Name')).toEqual([
+      'error: directory name `Bad_Name` must be lowercase alphanumeric with single hyphens between words',
+    ]);
+    expect(messages('---\ndescription: Does a thing.\n---\nBody.\n', 'claude-pdf')).toEqual([
+      "warning: directory name contains reserved word `claude` — Claude's platform rejects it",
+    ]);
+    expect(messages('---\ndescription: Does a thing.\n---\nBody.\n', 'good-skill')).toEqual([]);
+  });
+
   it('requires name and description for Codex', () => {
     expect(messages('---\nmodel: inherit\n---\nBody.\n', undefined, 'codex')[0]).toStartWith(
       'error: invalid frontmatter — name:',

@@ -75,7 +75,7 @@ export type ClaudeAgentFrontmatter = z.infer<typeof claudeAgentFrontmatterSchema
  * A Codex custom agent file (`.codex/agents/<name>.toml`), as parsed TOML.
  * `name`, `description`, and `developer_instructions` are required. The file
  * may also carry any `config.toml` key, so unknown keys are kept rather than
- * rejected. Codex 0.160 validates `mcp_servers`, `sandbox_mode`, `hooks`, and
+ * rejected, and their values are not validated. Codex 0.160 validates `mcp_servers`, `sandbox_mode`, `hooks`, and
  * `tools` here but drops them when it loads the role.
  */
 export const codexAgentSchema = z.looseObject({

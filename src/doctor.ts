@@ -38,43 +38,53 @@ function windowsReservedName(name: string, kind: 'skill' | 'agent'): Issue[] {
     : [];
 }
 
+/** Claude's platform rejects these words in a skill name. */
+function reservedWords(name: string, label: string): Issue[] {
+  return RESERVED_NAME_WORDS.filter((word) => name.includes(word)).map((word) =>
+    warning(`${label} contains reserved word \`${word}\` — Claude's platform rejects it`),
+  );
+}
+
+function directoryMismatch(name: string | undefined, directoryName: string | undefined): Issue[] {
+  if (name === undefined || directoryName === undefined || name === directoryName) return [];
+
+  return [error(`name \`${name}\` must match its directory name \`${directoryName}\``)];
+}
+
 /**
  * The agentskills.io naming rules apply to both tools; the reserved words are
  * Claude's platform rule, so they are checked only for the `claude` target.
+ * Claude Code names a skill after its directory when `name` is absent, so the
+ * rules then apply to the directory name.
  */
 function checkName(
   name: string | undefined,
   directoryName: string | undefined,
   target: Target,
 ): Issue[] {
-  // Claude Code names a skill after its directory when `name` is absent.
-  if (name === undefined) return [];
+  const effectiveName = name ?? directoryName;
+  if (effectiveName === undefined) return [];
 
+  const label = name === undefined ? 'directory name' : 'name';
   const issues: Issue[] = [];
 
-  if (!NAME_PATTERN.test(name)) {
+  if (!NAME_PATTERN.test(effectiveName)) {
     issues.push(
-      error(`name \`${name}\` must be lowercase alphanumeric with single hyphens between words`),
+      error(
+        `${label} \`${effectiveName}\` must be lowercase alphanumeric with single hyphens between words`,
+      ),
     );
   }
-  if (name.length > MAXIMUM_NAME_LENGTH) {
-    issues.push(error(`name exceeds ${MAXIMUM_NAME_LENGTH} characters`));
-  }
-  if (directoryName !== undefined && name !== directoryName) {
-    issues.push(error(`name \`${name}\` must match its directory name \`${directoryName}\``));
-  }
-  issues.push(...windowsReservedName(name, 'skill'));
-  if (target !== 'claude') return issues;
-
-  for (const word of RESERVED_NAME_WORDS) {
-    if (name.includes(word)) {
-      issues.push(
-        warning(`name contains reserved word \`${word}\` — Claude's platform rejects it`),
-      );
-    }
+  if (effectiveName.length > MAXIMUM_NAME_LENGTH) {
+    issues.push(error(`${label} exceeds ${MAXIMUM_NAME_LENGTH} characters`));
   }
 
-  return issues;
+  return [
+    ...issues,
+    ...directoryMismatch(name, directoryName),
+    ...windowsReservedName(effectiveName, 'skill'),
+    ...(target === 'claude' ? reservedWords(effectiveName, label) : []),
+  ];
 }
 
 /** The no-XML-tags rule is Claude's platform rule, so it runs only for the `claude` target. */
