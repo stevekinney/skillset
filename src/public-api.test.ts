@@ -181,7 +181,7 @@ describe('public API', () => {
       });
     }
 
-    it('keeps the file validators and their gray-matter dependency out of every entry point', async () => {
+    it('keeps the file validators out of the subpath entry points', async () => {
       for (const name of entries) {
         const entry: Record<string, unknown> = await import(`./entry-${name}.js`);
 
