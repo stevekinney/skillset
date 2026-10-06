@@ -1,6 +1,6 @@
 {
   "name": "@lostgradient/skillset",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Zod schemas, type guards, and validators for Claude Code and OpenAI Codex: skill and subagent frontmatter, MCP servers, hooks and hook payloads, session transcripts, and workflow scripts.",
   "homepage": "https://github.com/stevekinney/skillset#readme",
   "bugs": "https://github.com/stevekinney/skillset/issues",
