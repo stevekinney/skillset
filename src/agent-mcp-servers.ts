@@ -1,17 +1,13 @@
 import { z } from 'zod';
 
-import type { Issue } from './issue.js';
 import { isMapping } from './frontmatter.js';
+import { warning, type Issue } from './issue.js';
 import {
   claudeMcpEntryProblems,
   claudeMcpServerSchema,
   type McpProblem,
   unknownClaudeMcpFields,
 } from './mcp-schema.js';
-
-function warning(message: string): Issue {
-  return { severity: 'warning', message };
-}
 
 // Claude Code's own `claudeai-proxy` entry (the claude.ai connectors it manages
 // itself). Its loader accepts the type from files, but it is not a transport an

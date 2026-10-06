@@ -151,6 +151,18 @@ describe('validateSkillMetadata', () => {
     expect(codex.frontmatter).toEqual({ name: 'a-skill', description: 'Does a thing.' });
   });
 
+  it('applies the name format and directory match for Codex too', () => {
+    const result = validateSkillMetadata(skill('name: Bad_Name\ndescription: Does a thing.'), {
+      target: 'codex',
+      directoryName: 'other',
+    });
+    expect(result.valid).toBe(false);
+    expect(messages(result)).toEqual([
+      'name `Bad_Name` must be lowercase alphanumeric with single hyphens between words',
+      'name `Bad_Name` must match its directory name `other`',
+    ]);
+  });
+
   it('skips the listing limit for Codex', () => {
     const result = validateSkillMetadata(
       skill(`name: a-skill\ndescription: ${'a'.repeat(1000)}\nwhen_to_use: ${'b'.repeat(600)}`),

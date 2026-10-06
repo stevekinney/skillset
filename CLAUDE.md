@@ -8,8 +8,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 bun run build             # Build for production (outputs to dist/)
-bun ./dist/bun/index.js   # Run Bun-optimized build
-node ./dist/node/index.js # Run Node-compatible build
 ```
 
 ### Testing
@@ -32,7 +30,7 @@ bun run typecheck:test   # TypeScript type checking (test files)
 bun run format           # Format all files with Prettier
 bun run format:check     # Check formatting without changes
 bun run check            # Fast local sanity: format:check + lint + typecheck
-bun run validate         # Full gate: format:check + lint + typecheck + typecheck:test + test + build + package:check
+bun run validate         # Full gate: format:check + lint + typecheck + typecheck:test + test + build + package:check + verify:package-types
 ```
 
 ### Utilities

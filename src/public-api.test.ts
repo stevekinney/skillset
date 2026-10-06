@@ -181,6 +181,15 @@ describe('public API', () => {
       });
     }
 
+    it('keeps the file validators and their gray-matter dependency out of every entry point', async () => {
+      for (const name of entries) {
+        const entry: Record<string, unknown> = await import(`./entry-${name}.js`);
+
+        expect(entry['validateSkillMetadata']).toBeUndefined();
+        expect(entry['validateSubagentMetadata']).toBeUndefined();
+      }
+    });
+
     it('covers every hook, session, and workflow schema in some entry point', async () => {
       const hooks = Object.keys(await import('./entry-hooks.js'));
       const sessions = Object.keys(await import('./entry-sessions.js'));

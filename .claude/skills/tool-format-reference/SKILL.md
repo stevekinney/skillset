@@ -39,7 +39,7 @@ relying on this after either tool has had major releases.
   there).** Docs only list the `.agents` chain; the filesystem proves both.
 - **`license`/`compatibility`/`metadata` are agentskills.io spec fields**, not
   documented Claude Code frontmatter. Claude ignores unknown keys, so
-  emitting them is harmless; don't cite them as Claude features.
+  including them is harmless; don't cite them as Claude features.
 - **SSE**: Claude Code still accepts `type: sse` (plus `ws`); Codex supports
   only stdio and streamable HTTP. Claude did not "deprecate" sse/ws; Codex
   simply can't express them.
@@ -303,8 +303,7 @@ nested `[profiles.*]` deprecated), `project_doc_fallback_filenames` (this
 machine: `["CLAUDE.md"]` — Codex falls back to reading CLAUDE.md when
 AGENTS.md is absent), `model_instructions_file`, enterprise
 `requirements.toml`/`managed_config.toml` (incl. `allow_managed_hooks_only`).
-`--strict-config` makes Codex error on unknown keys — useful for validating
-our emitted TOML.
+`--strict-config` makes Codex error on unknown keys — useful for checking a config.toml by hand.
 
 ## Open questions (unverified — do not encode as fact)
 

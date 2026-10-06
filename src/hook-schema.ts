@@ -1,62 +1,7 @@
 import { z } from 'zod';
 
-/**
- * Lifecycle events both tools support. Verified October 2026 against Claude
- * Code 2.1.288 and codex-cli 0.160.0 (official hooks docs, release notes, and
- * the installed binaries' event enums).
- */
-const SHARED_HOOK_EVENTS = [
-  'SessionStart',
-  'SessionEnd',
-  'PreToolUse',
-  'PermissionRequest',
-  'PostToolUse',
-  'UserPromptSubmit',
-  'Stop',
-  'PreCompact',
-  'PostCompact',
-  'SubagentStart',
-  'SubagentStop',
-] as const;
-
-/** Lifecycle events only Claude Code supports, kept to the documented list. */
-export const CLAUDE_ONLY_HOOK_EVENTS = new Set([
-  'Setup',
-  'UserPromptExpansion',
-  'StopFailure',
-  'PostToolBatch',
-  'PermissionDenied',
-  'PostToolUseFailure',
-  'TeammateIdle',
-  'TaskCreated',
-  'TaskCompleted',
-  'InstructionsLoaded',
-  'ConfigChange',
-  'CwdChanged',
-  'DirectoryAdded',
-  'FileChanged',
-  'WorktreeCreate',
-  'WorktreeRemove',
-  'Notification',
-  'MessageDisplay',
-  'Elicitation',
-  'ElicitationResult',
-  // Claude Code 2.1.251+.
-  'PreModelSwitch',
-  'PostModelSwitch',
-]);
-
-/** Lifecycle events only Codex supports. */
-export const CODEX_ONLY_HOOK_EVENTS = new Set([
-  // codex-cli 0.150.0+.
-  'Interrupt',
-]);
-
-/** Every lifecycle event Claude Code supports. */
-export const CLAUDE_HOOK_EVENTS = new Set([...SHARED_HOOK_EVENTS, ...CLAUDE_ONLY_HOOK_EVENTS]);
-
-/** Every lifecycle event Codex supports. */
-export const CODEX_HOOK_EVENTS = new Set([...SHARED_HOOK_EVENTS, ...CODEX_ONLY_HOOK_EVENTS]);
+import { claudeHookEventNames } from './claude-hook-shared.js';
+import { codexHookEventNames } from './codex-hook-payloads.js';
 
 // Claude Code's hook handler schema, transcribed from the 2.1.288 binary's own
 // Zod definitions (fields marked `@internal` there are included as optional).
@@ -133,7 +78,7 @@ const claudeHookEntrySchema = z.looseObject({
  * Unknown event names are rejected, as Claude Code's own schema does.
  */
 export const claudeHookSettingsSchema = z.partialRecord(
-  z.enum([...CLAUDE_HOOK_EVENTS]),
+  z.enum(claudeHookEventNames),
   z.array(claudeHookEntrySchema),
 );
 
@@ -233,7 +178,7 @@ const codexMatcherGroupSchema = z.looseObject({
 });
 
 const codexEventTables = Object.fromEntries(
-  [...CODEX_HOOK_EVENTS].map((event) => [event, z.array(codexMatcherGroupSchema).optional()]),
+  codexHookEventNames.map((event) => [event, z.array(codexMatcherGroupSchema).optional()]),
 );
 
 /**
