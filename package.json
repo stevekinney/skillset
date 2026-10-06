@@ -1,6 +1,6 @@
 {
   "name": "@lostgradient/skillset",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Zod schemas, type guards, and validators for Claude Code and OpenAI Codex: skill and subagent frontmatter, MCP servers, hooks and hook payloads, session transcripts, and workflow scripts.",
   "homepage": "https://github.com/stevekinney/skillset#readme",
   "bugs": "https://github.com/stevekinney/skillset/issues",
@@ -95,14 +95,16 @@
   },
   "dependencies": {
     "acorn": "^8.18.0",
-    "gray-matter": "^4.0.3",
+    "js-yaml": "^3.14.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
     "@types/bun": "^1.3.14",
+    "@types/js-yaml": "^3.12.10",
     "@types/node": "^26.1.1",
     "chalk": "^6.0.1",
+    "gray-matter": "^4.0.3",
     "lefthook": "^2.1.10",
     "oxlint": "^1.75.0",
     "oxlint-tsgolint": "^7.0.2001",
