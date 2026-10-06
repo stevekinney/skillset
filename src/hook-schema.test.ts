@@ -1,15 +1,10 @@
 import { describe, expect, it } from 'bun:test';
 
 import {
-  claudeHandlerProblems,
   claudeHookSettingsSchema,
   codexHandlerProblems,
-  codexHookFindings,
   codexHookSettingsSchema,
-  codexRunsHandlerType,
-  unknownClaudeHandlerFields,
   unknownClaudeHookFields,
-  unknownCodexHandlerFields,
 } from './hook-schema.js';
 
 const invalidCodexHooks = (value: unknown): boolean =>
@@ -122,20 +117,7 @@ describe('unknownClaudeHookFields', () => {
   });
 });
 
-describe('handler validation helpers', () => {
-  it('validates Claude handlers by type and requires the type literal', () => {
-    expect(claudeHandlerProblems({ type: 'command', command: 'x' })).toEqual([]);
-    expect(claudeHandlerProblems({ command: 'x' })[0]?.path).toEqual(['type']);
-    expect(claudeHandlerProblems({ type: 'http', url: 'nope' })[0]?.path).toEqual(['url']);
-    expect(claudeHandlerProblems({ type: 'mystery' })[0]?.message).toContain(
-      'unknown handler type',
-    );
-    expect(unknownClaudeHandlerFields({ type: 'command', command: 'x', mystery: 1 })).toEqual([
-      'mystery',
-    ]);
-    expect(unknownClaudeHandlerFields({ type: 'mystery', a: 1 })).toEqual([]);
-  });
-
+describe('codexHandlerProblems', () => {
   it('validates Codex handlers by type', () => {
     expect(codexHandlerProblems({ type: 'command', command: 'x', timeout: 5 })).toEqual([]);
     expect(codexHandlerProblems({ type: 'command', command: '' })[0]?.path).toEqual(['command']);
@@ -143,15 +125,6 @@ describe('handler validation helpers', () => {
     expect(codexHandlerProblems({ type: 'mcp_tool', server: 's' })[0]?.path).toEqual(['tool']);
     expect(codexHandlerProblems({ type: 'prompt', prompt: 'anything' })).toEqual([]);
     expect(codexHandlerProblems({ type: 'mystery' })).toEqual([]);
-    expect(unknownCodexHandlerFields({ command: 'x', if: 'y', command_windows: 'z' })).toEqual([
-      'if',
-    ]);
-    expect(unknownCodexHandlerFields({ type: 'prompt', prompt: 'x' })).toEqual([]);
-    expect(unknownCodexHandlerFields({ type: 'mystery', a: 1 })).toEqual([]);
-    expect(codexRunsHandlerType('command')).toBe(true);
-    expect(codexRunsHandlerType('mcp_tool')).toBe(true);
-    expect(codexRunsHandlerType('prompt')).toBe(false);
-    expect(codexRunsHandlerType('mystery')).toBe(false);
   });
 });
 
@@ -186,40 +159,9 @@ describe('codexHookSettingsSchema', () => {
     expect(invalidCodexHooks({ state: { key: { enabled: 'yes' } } })).toBe(true);
   });
 
-  it('keeps handlers with an unrecognised type for doctor to flag', () => {
+  it('keeps handlers with an unrecognised type, since a Codex rejection is unverified', () => {
     expect(
       codexHookSettingsSchema.safeParse({ Stop: [{ hooks: [{ type: 'mystery' }] }] }).success,
     ).toBe(true);
-  });
-
-  it('reports unknown fields, unknown types, and skipped handlers', () => {
-    const findings = codexHookFindings(
-      codexHookSettingsSchema.parse({
-        Sneeze: [],
-        Stop: [
-          {
-            colour: 'red',
-            hooks: [
-              { type: 'command', command: 'x', if: 'y' },
-              { type: 'mystery' },
-              { type: 'prompt', prompt: 'p' },
-              { type: 'agent' },
-            ],
-          },
-        ],
-      }),
-    );
-    expect(findings.unknownFields).toEqual([
-      'hooks.Stop[0].colour',
-      'hooks.Stop[0].hooks[0].if',
-      'hooks.Sneeze',
-    ]);
-    expect(findings.unknownTypes).toEqual(['hooks.Stop[0].hooks[1]']);
-    expect(findings.skippedHandlers).toEqual(['hooks.Stop[0].hooks[2]', 'hooks.Stop[0].hooks[3]']);
-    expect(codexHookFindings({})).toEqual({
-      unknownFields: [],
-      unknownTypes: [],
-      skippedHandlers: [],
-    });
   });
 });

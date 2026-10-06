@@ -135,28 +135,40 @@ describe('validateSkillMetadata', () => {
     expect(messages(result).join('\n')).toContain('truncates them in the skill listing');
   });
 
-  it('warns when gray-matter and the compiler read a value differently', () => {
-    const result = validateSkillMetadata(
-      skill('name: a-skill\ndescription: Does a thing.\nmetadata:\n  released: 2024-01-01'),
-    );
+  it('checks against the Codex schema with target codex', () => {
+    const missingName = validateSkillMetadata(skill('description: Does a thing.'), {
+      target: 'codex',
+    });
+    expect(missingName.valid).toBe(false);
+    expect(messages(missingName)[0]).toStartWith('invalid frontmatter — name:');
 
-    expect(result.valid).toBe(true);
-    expect(messages(result)).toContain(
-      'gray-matter and the compiler read this frontmatter differently (an unquoted date or a number with a leading zero) — quote the value so every tool reads the same thing',
+    const codex = validateSkillMetadata(
+      skill('name: a-skill\ndescription: Does a thing.\nagent: reviewer\nmodel: inherit'),
+      { target: 'codex' },
     );
+    expect(codex.valid).toBe(true);
+    expect(codex.issues).toEqual([]);
+    expect(codex.frontmatter).toEqual({ name: 'a-skill', description: 'Does a thing.' });
   });
 
-  it('warns when the compiler cannot parse a block gray-matter accepts', () => {
-    const result = validateSkillMetadata(
-      skill('name: a-skill\ndescription: Does a thing.\nmetadata: {a: "1",\n\tb: "2"}'),
-    );
-
-    expect(result.valid).toBe(true);
+  it('applies the name format and directory match for Codex too', () => {
+    const result = validateSkillMetadata(skill('name: Bad_Name\ndescription: Does a thing.'), {
+      target: 'codex',
+      directoryName: 'other',
+    });
+    expect(result.valid).toBe(false);
     expect(messages(result)).toEqual([
-      expect.stringMatching(
-        /^gray-matter reads this frontmatter but the compiler's YAML parser does not — /,
-      ),
+      'name `Bad_Name` must be lowercase alphanumeric with single hyphens between words',
+      'name `Bad_Name` must match its directory name `other`',
     ]);
+  });
+
+  it('skips the listing limit for Codex', () => {
+    const result = validateSkillMetadata(
+      skill(`name: a-skill\ndescription: ${'a'.repeat(1000)}\nwhen_to_use: ${'b'.repeat(600)}`),
+      { target: 'codex' },
+    );
+    expect(result.issues).toEqual([]);
   });
 });
 
@@ -206,9 +218,6 @@ describe('validateSubagentMetadata', () => {
       "the agent body is empty — it is the agent's system prompt",
       '`permissionMode: bypassPermissions` skips every permission prompt for this agent',
       '`Bash` is in both `tools` and `disallowedTools`',
-      expect.stringContaining('`tools` is folded into the Codex developer instructions'),
-      expect.stringContaining('`disallowedTools` is folded into the Codex developer instructions'),
-      'permissionMode `bypassPermissions` has no Codex sandbox_mode mapping — set `codex.sandbox_mode` explicitly',
     ]);
   });
 

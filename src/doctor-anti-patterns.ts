@@ -1,6 +1,9 @@
 import type { ParsedAgentFile } from './agent-frontmatter.js';
-import type { Issue } from './doctor.js';
-import type { ParsedSkillFile } from './frontmatter.js';
+import type { SkillFields } from './doctor.js';
+import type { ParsedSkillFile, Target } from './frontmatter.js';
+import { error, warning, type Issue } from './issue.js';
+
+type ParsedSkill = ParsedSkillFile<SkillFields>;
 
 const VAGUE_NAMES = new Set([
   'helper',
@@ -22,18 +25,14 @@ const POINT_OF_VIEW_PATTERN = /^\s*(i|i'm|i'll|we|you|your)\b/i;
 const LISTING_LIMIT = 1536;
 const MAXIMUM_COMPATIBILITY_LENGTH = 500;
 
-function warning(message: string): Issue {
-  return { severity: 'warning', message };
-}
-
 function toolList(value: string | string[] | undefined): string[] {
   const items = typeof value === 'string' ? value.split(',') : (value ?? []);
 
   return items.map((item) => item.trim()).filter((item) => item.length > 0);
 }
 
-function checkDescriptionStyle(parsed: ParsedSkillFile): Issue[] {
-  const { description, when_to_use: whenToUse } = parsed.frontmatter;
+function checkDescriptionStyle(parsed: ParsedSkill, target: Target): Issue[] {
+  const { description = '', when_to_use: whenToUse } = parsed.frontmatter;
   const issues: Issue[] = [];
 
   if (POINT_OF_VIEW_PATTERN.test(description)) {
@@ -43,7 +42,7 @@ function checkDescriptionStyle(parsed: ParsedSkillFile): Issue[] {
       ),
     );
   }
-  if (description.length + (whenToUse?.length ?? 0) > LISTING_LIMIT) {
+  if (target === 'claude' && description.length + (whenToUse?.length ?? 0) > LISTING_LIMIT) {
     issues.push(
       warning(
         `description and when_to_use together exceed ${LISTING_LIMIT} characters — Claude Code truncates them in the skill listing`,
@@ -54,15 +53,12 @@ function checkDescriptionStyle(parsed: ParsedSkillFile): Issue[] {
   return issues;
 }
 
-function checkSpecFields(parsed: ParsedSkillFile): Issue[] {
+function checkSpecFields(parsed: ParsedSkill): Issue[] {
   const { compatibility, metadata } = parsed.frontmatter;
   const issues: Issue[] = [];
 
   if (compatibility !== undefined && compatibility.length > MAXIMUM_COMPATIBILITY_LENGTH) {
-    issues.push({
-      severity: 'error',
-      message: `compatibility exceeds ${MAXIMUM_COMPATIBILITY_LENGTH} characters`,
-    });
+    issues.push(error(`compatibility exceeds ${MAXIMUM_COMPATIBILITY_LENGTH} characters`));
   }
   for (const [key, value] of Object.entries(metadata ?? {})) {
     if (typeof value === 'string') continue;
@@ -76,7 +72,8 @@ function checkSpecFields(parsed: ParsedSkillFile): Issue[] {
   return issues;
 }
 
-function checkInvocation(parsed: ParsedSkillFile): Issue[] {
+/** Claude Code invocation settings that cancel each other out or do nothing. */
+function checkInvocation(parsed: ParsedSkill): Issue[] {
   const { agent, context } = parsed.frontmatter;
   const issues: Issue[] = [];
 
@@ -98,15 +95,15 @@ function checkInvocation(parsed: ParsedSkillFile): Issue[] {
 }
 
 /** Common skill misconfigurations that are valid frontmatter but almost never intended. */
-export function checkSkillAntiPatterns(parsed: ParsedSkillFile): Issue[] {
+export function checkSkillAntiPatterns(parsed: ParsedSkill, target: Target): Issue[] {
   const { name } = parsed.frontmatter;
   const issues = [
-    ...checkDescriptionStyle(parsed),
+    ...checkDescriptionStyle(parsed, target),
     ...checkSpecFields(parsed),
-    ...checkInvocation(parsed),
+    ...(target === 'claude' ? checkInvocation(parsed) : []),
   ];
 
-  if (VAGUE_NAMES.has(name)) {
+  if (name !== undefined && VAGUE_NAMES.has(name)) {
     issues.unshift(warning(`name \`${name}\` is vague — name the skill for what it does`));
   }
   if (parsed.body.trim().length === 0) {

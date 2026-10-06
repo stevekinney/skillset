@@ -44,8 +44,7 @@ const sourceDirectory = import.meta.dir;
 
 /**
  * Source modules that export a schema. Selected by their text rather than by
- * importing everything, because some modules (the `bin.ts` entry point) run on
- * import.
+ * importing every module.
  */
 async function schemaModules(): Promise<string[]> {
   const files = await readdir(sourceDirectory);
@@ -104,18 +103,18 @@ describe('public API', () => {
     const guards = Object.keys(publicApi).filter((name) => /^is[A-Z]/.test(name));
     expect(guards.toSorted()).toEqual(
       [
-        'isAgentFrontmatter',
+        'isClaudeAgentFrontmatter',
         'isClaudeAgentMcpServer',
         'isClaudeEffort',
         'isClaudeHookInput',
         'isClaudeHookInputFor',
         'isClaudeHookOutput',
         'isClaudeHookSettings',
-        'isClaudeMcpOverride',
         'isClaudeMcpServer',
         'isClaudeSessionRecord',
         'isClaudeSessionRecordFor',
         'isClaudeSettingsEffort',
+        'isClaudeSkillFrontmatter',
         'isClaudeWorkflowAgentOptions',
         'isClaudeWorkflowBudget',
         'isClaudeWorkflowJournalRecord',
@@ -125,21 +124,18 @@ describe('public API', () => {
         'isClaudeWorkflowRunRecord',
         'isClaudeWorkflowToolInput',
         'isClaudeWorkflowToolOutput',
+        'isCodexAgent',
         'isCodexHookInput',
         'isCodexHookInputFor',
         'isCodexHookOutputFor',
         'isCodexHookSettings',
-        'isCodexMcpFields',
         'isCodexMcpServer',
         'isCodexSessionRecord',
         'isCodexSessionRecordFor',
+        'isCodexSkillFrontmatter',
         'isCodexSkills',
         'isCodexTools',
-        'isDefaultsSource',
-        'isHooksSource',
-        'isMcpSource',
         'isOpenaiConfiguration',
-        'isSkillFrontmatter',
       ].toSorted(),
     );
   });
@@ -185,13 +181,12 @@ describe('public API', () => {
       });
     }
 
-    it('keeps the CLI and the config-reading modules out of every entry point', async () => {
+    it('keeps the file validators out of the subpath entry points', async () => {
       for (const name of entries) {
         const entry: Record<string, unknown> = await import(`./entry-${name}.js`);
 
-        for (const forbidden of ['runCli', 'environment', 'runSync', 'validateSkillMetadata']) {
-          expect(entry[forbidden]).toBeUndefined();
-        }
+        expect(entry['validateSkillMetadata']).toBeUndefined();
+        expect(entry['validateSubagentMetadata']).toBeUndefined();
       }
     });
 

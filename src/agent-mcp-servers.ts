@@ -1,17 +1,13 @@
 import { z } from 'zod';
 
-import type { Issue } from './doctor.js';
 import { isMapping } from './frontmatter.js';
+import { warning, type Issue } from './issue.js';
 import {
   claudeMcpEntryProblems,
   claudeMcpServerSchema,
   type McpProblem,
   unknownClaudeMcpFields,
 } from './mcp-schema.js';
-
-function warning(message: string): Issue {
-  return { severity: 'warning', message };
-}
 
 // Claude Code's own `claudeai-proxy` entry (the claude.ai connectors it manages
 // itself). Its loader accepts the type from files, but it is not a transport an
@@ -49,7 +45,7 @@ export type ClaudeAgentMcpServer = z.infer<typeof claudeAgentMcpServerSchema>;
  * Why Claude Code would drop one subagent `mcpServers` item: it is either the
  * name of an already-configured server, or a mapping from a server name to a
  * full inline entry. Claude Code requires exactly one key per mapping at load
- * time rather than in its schema, so doctor reports that rule separately.
+ * time rather than in its schema, so validation reports that rule separately.
  */
 export function claudeAgentMcpItemProblems(item: unknown): McpProblem[] {
   if (typeof item === 'string') return [];

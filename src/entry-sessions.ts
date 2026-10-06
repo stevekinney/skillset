@@ -1,8 +1,8 @@
 /**
  * Claude Code and Codex session transcript schemas, parsers, type guards, and types.
  *
- * A subset of the package root, importable without loading the CLI or reading
- * skillset's configuration files. Every name here is also exported from the root.
+ * A subset of the package root for code that only needs this area. Every name
+ * here is also exported from the root, as the same value.
  */
 export {
   isClaudeSessionRecord,

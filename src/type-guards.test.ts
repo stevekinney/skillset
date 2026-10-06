@@ -3,18 +3,18 @@ import { describe, expect, it } from 'bun:test';
 import { otherPayloads } from '../test/codex-session-fixtures.js';
 
 import {
-  isAgentFrontmatter,
+  isClaudeAgentFrontmatter,
   isClaudeAgentMcpServer,
   isClaudeEffort,
   isClaudeHookInput,
   isClaudeHookInputFor,
   isClaudeHookOutput,
   isClaudeHookSettings,
-  isClaudeMcpOverride,
   isClaudeMcpServer,
   isClaudeSessionRecord,
   isClaudeSessionRecordFor,
   isClaudeSettingsEffort,
+  isClaudeSkillFrontmatter,
   isClaudeWorkflowAgentOptions,
   isClaudeWorkflowBudget,
   isClaudeWorkflowJournalRecord,
@@ -27,18 +27,15 @@ import {
   isCodexHookInput,
   isCodexHookInputFor,
   isCodexHookOutputFor,
+  isCodexAgent,
   isCodexHookSettings,
-  isCodexMcpFields,
   isCodexMcpServer,
   isCodexSessionRecord,
   isCodexSessionRecordFor,
+  isCodexSkillFrontmatter,
   isCodexSkills,
   isCodexTools,
-  isDefaultsSource,
-  isHooksSource,
-  isMcpSource,
   isOpenaiConfiguration,
-  isSkillFrontmatter,
 } from './type-guards.js';
 
 const claudeStopInput = {
@@ -63,15 +60,24 @@ const codexStopInput = {
 
 describe('configuration guards', () => {
   const cases: [string, (value: unknown) => boolean, unknown, unknown][] = [
-    ['isSkillFrontmatter', isSkillFrontmatter, { name: 'a', description: 'b' }, { name: 'a' }],
-    ['isAgentFrontmatter', isAgentFrontmatter, { name: 'a', description: 'b' }, { name: 1 }],
-    ['isHooksSource', isHooksSource, { hooks: { Stop: [{ command: 'x' }] } }, { hooks: 1 }],
-    ['isMcpSource', isMcpSource, { servers: { a: { command: 'x' } } }, { servers: [] }],
+    ['isClaudeSkillFrontmatter', isClaudeSkillFrontmatter, {}, { name: 1 }],
     [
-      'isDefaultsSource',
-      isDefaultsSource,
-      { claude: { effort: 'high' } },
-      { claude: { effort: 'max' } },
+      'isCodexSkillFrontmatter',
+      isCodexSkillFrontmatter,
+      { name: 'a', description: 'b' },
+      { name: 'a' },
+    ],
+    [
+      'isClaudeAgentFrontmatter',
+      isClaudeAgentFrontmatter,
+      { name: 'a', description: 'b' },
+      { name: 1 },
+    ],
+    [
+      'isCodexAgent',
+      isCodexAgent,
+      { name: 'a', description: 'b', developer_instructions: 'c' },
+      { name: 'a', description: 'b' },
     ],
     [
       'isClaudeHookSettings',
@@ -86,8 +92,6 @@ describe('configuration guards', () => {
       { Stop: 'x' },
     ],
     ['isClaudeMcpServer', isClaudeMcpServer, { command: 'npx' }, { type: 'http' }],
-    ['isClaudeMcpOverride', isClaudeMcpOverride, { headersHelper: 'x' }, { timeout: 'soon' }],
-    ['isCodexMcpFields', isCodexMcpFields, { startup_timeout_sec: 20 }, { enabled: 'yes' }],
     [
       'isCodexMcpServer',
       isCodexMcpServer,
@@ -121,7 +125,7 @@ describe('configuration guards', () => {
 
   it('narrows to the input type, so values the schema converts are still typed honestly', () => {
     const value: unknown = { name: 'a', description: 'b', 'disable-model-invocation': 'yes' };
-    if (!isSkillFrontmatter(value)) throw new Error('expected a skill frontmatter input');
+    if (!isClaudeSkillFrontmatter(value)) throw new Error('expected a skill frontmatter input');
     expect(value['disable-model-invocation']).toBe('yes');
   });
 });

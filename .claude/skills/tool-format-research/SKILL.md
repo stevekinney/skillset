@@ -1,14 +1,15 @@
 ---
 name: tool-format-research
-description: How to research and verify Claude Code and Codex CLI functionality before changing this project's compilers, doctor rules, or documentation. Use before adding/removing any frontmatter field, mapping, fallback, or "X is unsupported" claim.
+description: How to research and verify Claude Code and Codex CLI functionality before changing this project's schemas, validation rules, or documentation. Use before adding/removing any schema field, validation rule, or "X is unsupported" claim.
 ---
 
 # Researching Claude Code and Codex functionality
 
-This project compiles configuration for two fast-moving tools. Every compiler
-decision encodes a factual claim about what those tools support, and a wrong
-claim ships wrong output. Follow this procedure before changing any schema,
-mapping, doctor warning, or README statement about either tool.
+This project publishes schemas and validators for two fast-moving tools. Every
+schema field and validation rule encodes a factual claim about what those tools
+accept, and a wrong claim rejects valid files or passes broken ones. Follow this
+procedure before changing any schema, validation rule, or README statement about
+either tool.
 
 ## Ground truth, in order of authority
 
@@ -44,37 +45,37 @@ claim only appears in a blog post, verify it against 1–3 before acting on it.
   "tool X does not support Y" because a docs page doesn't mention Y. That
   claim requires positive evidence: an explicit doc statement, a CLI error,
   or a maintainer statement. Otherwise write "not found in the docs as of
-  <date>; unverified" — and do not encode it in a doctor warning.
+  <date>; unverified" — and do not encode it in a validation rule.
 - **Date and version every claim.** Findings must carry the doc URL, the
   fetch date, and the CLI version probed.
 - **Label VERIFIED vs INFERRED.** VERIFIED = direct quote or command output
   you saw. INFERRED = anything else. Only VERIFIED claims may become schema
-  fields, mappings, or doctor errors; INFERRED at most becomes a warning with
+  fields or validation errors; INFERRED at most becomes a warning with
   hedged wording.
 - **Fan out, then reconcile.** For a broad sweep, run parallel research
   agents (one per tool, plus one auditing this repo's existing claims via the
   claim checklist below), then reconcile disagreements yourself against
   ground truth before touching code.
-- **When the two tools disagree with our union format**, prefer changing our
-  compiler over documenting around it. The union frontmatter exists to absorb
-  differences.
+- **Keep each tool's schema to that tool.** Claude Code and Codex read the same
+  file names differently (SKILL.md `name` is optional for one and required for
+  the other), so a fact about one never goes into the other's schema.
 
 ## Extracting this repo's current claims
 
 Every factual claim lives in a small set of files — audit these when
 re-verifying:
 
-- `src/frontmatter.ts`, `src/agent-frontmatter.ts` — field lists and enums.
-- `src/doctor.ts` — validation limits and every "has no Codex equivalent"
+- `src/frontmatter.ts`, `src/agent-frontmatter.ts` — field lists, enums, and
+  which fields are required.
+- `src/doctor.ts`, `src/doctor-anti-patterns.ts` — validation limits and every
   warning (each one is a falsifiable claim).
-- `src/fallback.ts` — the "Codex lacks inline shell / $ARGUMENTS / ${CLAUDE_*}"
-  rationale.
-- `src/mcp-config.ts` — target schemas and mapping rules.
-- `src/cli.ts` (`defaultTargetRoots`, `defaultMcpFiles`) — storage paths.
+- `src/mcp-schema.ts`, `src/hook-schema.ts`, `src/codex-agent-tables.ts` — MCP,
+  hook settings, and Codex table schemas.
+- `src/claude-hook-*.ts`, `src/codex-hook-payloads.ts` — hook payloads.
 - `README.md`, `CLAUDE.md` — prose restatements of all of the above.
 
 ## After research
 
 Update `.claude/skills/tool-format-reference/SKILL.md` with the corrected
 facts (it is the project's shared memory of both tools' surfaces), then update
-the compilers, doctor, tests, and README together — never just one of them.
+the schemas, validation rules, tests, and README together — never just one of them.

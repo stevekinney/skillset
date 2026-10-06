@@ -1,180 +1,149 @@
 import { describe, expect, it } from 'bun:test';
 
-import { claudeAgentFrontmatter, impliedSandboxMode, parseAgentFile } from './agent-frontmatter.js';
+import {
+  claudeAgentFrontmatterSchema,
+  codexAgentSchema,
+  parseClaudeAgentMapping,
+} from './agent-frontmatter.js';
 
-const full = `---
-name: reviewer
-description: Reviews diffs.
-tools: Read, Grep, Bash
-disallowedTools: Write
-model: haiku
-permissionMode: plan
-maxTurns: 10
-skills: [code-style]
-mcpServers: [codex]
-hooks:
-  PreToolUse: []
-memory: user
-background: true
-effort: low
-isolation: worktree
-color: cyan
-initialPrompt: Review the diff.
-codex:
-  model: gpt-5.6-luna
-  model_reasoning_effort: low
-  sandbox_mode: read-only
-  nickname_candidates: [rev]
----
+const full = {
+  name: 'reviewer',
+  description: 'Reviews diffs.',
+  tools: 'Read, Grep, Bash',
+  disallowedTools: 'Write',
+  model: 'haiku',
+  permissionMode: 'plan',
+  maxTurns: 10,
+  skills: ['code-style'],
+  mcpServers: ['codex'],
+  hooks: { PreToolUse: [] },
+  memory: 'user',
+  background: true,
+  effort: 'low',
+  isolation: 'worktree',
+  color: 'cyan',
+  initialPrompt: 'Review the diff.',
+};
 
-You review diffs.
-`;
+const minimal = { name: 'a', description: 'b' };
 
-describe('parseAgentFile', () => {
-  it('parses the full union frontmatter and body', () => {
-    const parsed = parseAgentFile(full);
-    expect(parsed.frontmatter.name).toBe('reviewer');
-    expect(parsed.frontmatter.color).toBe('cyan');
-    expect(parsed.frontmatter.codex?.model).toBe('gpt-5.6-luna');
-    expect(parsed.unknownKeys).toEqual([]);
-    expect(parsed.body).toBe('\nYou review diffs.\n');
-  });
-
-  it('collects unknown keys', () => {
-    const parsed = parseAgentFile('---\nname: a\ndescription: b\nmystery: 1\n---\nbody');
-    expect(parsed.unknownKeys).toEqual(['mystery']);
+describe('claudeAgentFrontmatterSchema', () => {
+  it('parses every documented field and requires name and description', () => {
+    expect(claudeAgentFrontmatterSchema.parse(full) as unknown).toEqual(full);
+    expect(() => claudeAgentFrontmatterSchema.parse({ name: 'a' })).toThrow();
+    expect(() => claudeAgentFrontmatterSchema.parse({ description: 'b' })).toThrow();
   });
 
   it('rejects invalid enums', () => {
+    expect(() => claudeAgentFrontmatterSchema.parse({ ...minimal, color: 'mauve' })).toThrow();
     expect(() =>
-      parseAgentFile('---\nname: a\ndescription: b\npermissionMode: sudo\n---\nbody'),
-    ).toThrow();
-    expect(() =>
-      parseAgentFile('---\nname: a\ndescription: b\ncodex:\n  sandbox_mode: yolo\n---\nbody'),
+      claudeAgentFrontmatterSchema.parse({ ...minimal, permissionMode: 'yolo' }),
     ).toThrow();
   });
-});
 
-describe('claudeAgentFrontmatter', () => {
-  it('keeps Claude fields and drops the codex block', () => {
-    const fields = claudeAgentFrontmatter(parseAgentFile(full).frontmatter);
-    expect(fields['permissionMode']).toBe('plan');
-    expect(fields['initialPrompt']).toBe('Review the diff.');
-    expect(fields['codex']).toBeUndefined();
-  });
-});
-
-describe('impliedSandboxMode', () => {
-  it('maps plan to read-only and acceptEdits to workspace-write', () => {
-    expect(impliedSandboxMode('plan')).toBe('read-only');
-    expect(impliedSandboxMode('acceptEdits')).toBe('workspace-write');
-  });
-
-  it('returns undefined for unmappable modes', () => {
-    expect(impliedSandboxMode('bypassPermissions')).toBeUndefined();
-    expect(impliedSandboxMode(undefined)).toBeUndefined();
-  });
-});
-
-const agent = (fields: string): string => `---\nname: a\ndescription: b\n${fields}\n---\nbody\n`;
-
-describe('current Claude Code and Codex agent fields', () => {
   it('accepts the fields added since Claude Code 2.1.221', () => {
-    const parsed = parseAgentFile(
-      agent('omitClaudeMd: true\nexperimental:\n  cacheTtl: 1h\nisolation: remote\neffort: 4000'),
-    ).frontmatter;
-    expect(claudeAgentFrontmatter(parsed)).toEqual({
-      name: 'a',
-      description: 'b',
+    const extra = {
       omitClaudeMd: true,
       experimental: { cacheTtl: '1h' },
       isolation: 'remote',
       effort: 4000,
+    };
+    expect(claudeAgentFrontmatterSchema.parse({ ...minimal, ...extra }) as unknown).toEqual({
+      ...minimal,
+      ...extra,
     });
-    expect(() => parseAgentFile(agent('experimental:\n  cacheTtl: 2h'))).toThrow();
-    expect(() => parseAgentFile(agent('isolation: container'))).toThrow();
+    expect(() =>
+      claudeAgentFrontmatterSchema.parse({ ...minimal, experimental: { cacheTtl: '2h' } }),
+    ).toThrow();
+    expect(() =>
+      claudeAgentFrontmatterSchema.parse({ ...minimal, isolation: 'container' }),
+    ).toThrow();
   });
 
   it('accepts only true/false spellings for background', () => {
-    expect(parseAgentFile(agent('background: "false"')).frontmatter.background).toBe(false);
-    expect(parseAgentFile(agent('background: "true"')).frontmatter.background).toBe(true);
-    expect(() => parseAgentFile(agent('background: "yes"'))).toThrow();
+    expect(claudeAgentFrontmatterSchema.parse({ ...minimal, background: 'false' }).background).toBe(
+      false,
+    );
+    expect(claudeAgentFrontmatterSchema.parse({ ...minimal, background: 'true' }).background).toBe(
+      true,
+    );
+    expect(() => claudeAgentFrontmatterSchema.parse({ ...minimal, background: 'yes' })).toThrow();
   });
 
-  it('validates the Codex verbosity and nickname fields like Codex does', () => {
-    expect(parseAgentFile(agent('codex:\n  model_verbosity: low')).frontmatter.codex).toEqual({
-      model_verbosity: 'low',
-    });
-    expect(() => parseAgentFile(agent('codex:\n  model_verbosity: loud'))).toThrow();
-    expect(() => parseAgentFile(agent('codex:\n  model_reasoning_effort: ""'))).toThrow();
-
-    expect(
-      parseAgentFile(agent('codex:\n  nickname_candidates: [Scout, Field_Agent-2]')).frontmatter
-        .codex?.nickname_candidates,
-    ).toEqual(['Scout', 'Field_Agent-2']);
-    for (const invalid of ['[]', '["  "]', '[Scout, " Scout "]', '[Scout!]']) {
-      expect(() => parseAgentFile(agent(`codex:\n  nickname_candidates: ${invalid}`))).toThrow();
-    }
-  });
-});
-
-describe('undocumented Claude Code agent fields', () => {
-  it('accepts the observer fields', () => {
-    const parsed = parseAgentFile(
-      agent('observer: auditor\nobserverMessage: Watch for drift.\nobserveSubagents: "false"'),
-    ).frontmatter;
-    expect(claudeAgentFrontmatter(parsed)).toEqual({
-      name: 'a',
-      description: 'b',
+  it('accepts the undocumented observer fields', () => {
+    const observer = {
       observer: 'auditor',
       observerMessage: 'Watch for drift.',
+      observeSubagents: 'false',
+    };
+    expect(claudeAgentFrontmatterSchema.parse({ ...minimal, ...observer })).toEqual({
+      ...minimal,
+      ...observer,
       observeSubagents: false,
     });
-    expect(() => parseAgentFile(agent('observer: ""'))).toThrow();
+    expect(() => claudeAgentFrontmatterSchema.parse({ ...minimal, observer: '' })).toThrow();
+  });
+
+  it('accepts server names and inline entries, and keeps items Claude Code would drop', () => {
+    const mcpServers = ['github', { playwright: { type: 'stdio', command: 'npx' } }, 5];
+    expect(claudeAgentFrontmatterSchema.parse({ ...minimal, mcpServers }).mcpServers).toEqual(
+      mcpServers,
+    );
   });
 });
 
-const frontmatterWith = (extra: string): string =>
-  `---\nname: a\ndescription: d\n${extra}\n---\nbody\n`;
+describe('parseClaudeAgentMapping', () => {
+  it('collects keys Claude Code does not read and keeps the body', () => {
+    const parsed = parseClaudeAgentMapping({ ...minimal, codex: {}, sparkle: 1 }, 'You review.');
+    expect(parsed.unknownKeys).toEqual(['codex', 'sparkle']);
+    expect(parsed.frontmatter).toEqual(minimal);
+    expect(parsed.body).toBe('You review.');
+  });
+});
 
-describe('mcp server typing', () => {
-  it('accepts server names and one-key inline entries', () => {
-    const parsed = parseAgentFile(
-      frontmatterWith(
-        'mcpServers:\n  - github\n  - playwright:\n      type: stdio\n      command: npx\n      args: ["-y", "x"]',
-      ),
-    );
-    expect(parsed.frontmatter.mcpServers).toEqual([
-      'github',
-      { playwright: { type: 'stdio', command: 'npx', args: ['-y', 'x'] } },
-    ]);
+describe('codexAgentSchema', () => {
+  const required = { name: 'reviewer', description: 'Reviews.', developer_instructions: 'Review.' };
+
+  it('requires name, description, and developer_instructions', () => {
+    expect(codexAgentSchema.parse(required)).toEqual(required);
+    for (const key of Object.keys(required)) {
+      const { [key]: _omitted, ...rest } = required as Record<string, string>;
+      expect(codexAgentSchema.safeParse(rest).success).toBe(false);
+    }
   });
 
-  it('keeps invalid items so doctor can warn that Claude Code drops them', () => {
+  it('keeps any other config.toml key', () => {
+    expect(codexAgentSchema.parse({ ...required, approval_policy: 'never' })).toEqual({
+      ...required,
+      approval_policy: 'never',
+    });
+  });
+
+  it('validates the verbosity, reasoning, and nickname fields like Codex does', () => {
+    expect(codexAgentSchema.parse({ ...required, model_verbosity: 'low' }).model_verbosity).toBe(
+      'low',
+    );
+    expect(() => codexAgentSchema.parse({ ...required, model_verbosity: 'loud' })).toThrow();
+    expect(() => codexAgentSchema.parse({ ...required, model_reasoning_effort: '' })).toThrow();
+
     expect(
-      parseAgentFile(frontmatterWith('mcpServers:\n  - a:\n      type: http\n  - 5')).frontmatter
-        .mcpServers,
-    ).toEqual([{ a: { type: 'http' } }, 5]);
+      codexAgentSchema.parse({ ...required, nickname_candidates: ['Scout', 'Field_Agent-2'] })
+        .nickname_candidates,
+    ).toEqual(['Scout', 'Field_Agent-2']);
+    for (const invalid of [[], ['  '], ['Scout', ' Scout '], ['Scout!']]) {
+      expect(() => codexAgentSchema.parse({ ...required, nickname_candidates: invalid })).toThrow();
+    }
   });
 
-  it('types codex.mcp_servers with the Codex schema', () => {
-    const parsed = parseAgentFile(
-      frontmatterWith(
-        'codex:\n  mcp_servers:\n    docs:\n      url: https://x\n      startup_readiness: catalog',
-      ),
-    );
-    expect(parsed.frontmatter.codex?.mcp_servers?.['docs']?.url).toBe('https://x');
+  it('types mcp_servers with the Codex schema', () => {
+    expect(
+      codexAgentSchema.parse({
+        ...required,
+        mcp_servers: { docs: { url: 'https://x', startup_readiness: 'catalog' } },
+      }).mcp_servers?.['docs']?.url,
+    ).toBe('https://x');
     expect(() =>
-      parseAgentFile(
-        frontmatterWith('codex:\n  mcp_servers:\n    docs:\n      command: x\n      url: y'),
-      ),
-    ).toThrow();
-    expect(() =>
-      parseAgentFile(
-        frontmatterWith(
-          'codex:\n  mcp_servers:\n    docs:\n      command: x\n      required: maybe',
-        ),
-      ),
+      codexAgentSchema.parse({ ...required, mcp_servers: { docs: { command: 'x', url: 'y' } } }),
     ).toThrow();
   });
 });
