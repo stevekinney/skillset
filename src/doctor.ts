@@ -8,6 +8,7 @@ import {
   type ParsedAgentFile,
 } from './agent-frontmatter.js';
 import { checkCodexAgentTables } from './agent-codex-checks.js';
+import { checkAgentAntiPatterns, checkSkillAntiPatterns } from './doctor-anti-patterns.js';
 import { checkInlineMcpServer } from './agent-mcp-servers.js';
 import type { SourceAgent, SourceSkill } from './discover.js';
 import { applyCodexFallbacks, argumentNames } from './fallback.js';
@@ -57,7 +58,7 @@ function warning(message: string): Issue {
   return { severity: 'warning', message };
 }
 
-function checkName(name: string, directoryName: string): Issue[] {
+function checkName(name: string, directoryName: string | undefined): Issue[] {
   const issues: Issue[] = [];
 
   if (!NAME_PATTERN.test(name)) {
@@ -68,7 +69,7 @@ function checkName(name: string, directoryName: string): Issue[] {
   if (name.length > MAXIMUM_NAME_LENGTH) {
     issues.push(error(`name exceeds ${MAXIMUM_NAME_LENGTH} characters`));
   }
-  if (name !== directoryName) {
+  if (directoryName !== undefined && name !== directoryName) {
     issues.push(error(`name \`${name}\` must match its directory name \`${directoryName}\``));
   }
   issues.push(...windowsReservedName(name, 'skill'));
@@ -149,6 +150,26 @@ function checkBody(parsed: ParsedSkillFile, raw: string): Issue[] {
   return issues;
 }
 
+/**
+ * Run every check against a skill whose frontmatter already parsed. `directoryName`
+ * is the folder the SKILL.md sits in; without it the name/directory match is skipped.
+ */
+export function checkParsedSkill(
+  parsed: ParsedSkillFile,
+  raw: string,
+  directoryName?: string,
+): Issue[] {
+  const { name, description } = parsed.frontmatter;
+
+  return [
+    ...checkName(name, directoryName),
+    ...checkDescription(description),
+    ...checkSkillAntiPatterns(parsed),
+    ...checkHookFields(parsed.frontmatter.hooks),
+    ...checkBody(parsed, raw),
+  ];
+}
+
 /** Run every check against one source skill. */
 export function checkSkill(skill: SourceSkill): SkillReport {
   let parsed: ParsedSkillFile;
@@ -162,14 +183,7 @@ export function checkSkill(skill: SourceSkill): SkillReport {
     };
   }
 
-  const issues = [
-    ...checkName(parsed.frontmatter.name, skill.name),
-    ...checkDescription(parsed.frontmatter.description),
-    ...checkHookFields(parsed.frontmatter.hooks),
-    ...checkBody(parsed, skill.raw),
-  ];
-
-  return { name: skill.name, issues, parsed };
+  return { name: skill.name, issues: checkParsedSkill(parsed, skill.raw, skill.name), parsed };
 }
 
 /** Run the doctor across every source skill. */
@@ -185,7 +199,8 @@ export type AgentReport = {
   parsed?: ParsedAgentFile;
 };
 
-function describeParseFailure(cause: unknown): string {
+/** Render a parse failure (a `ZodError` or any error) as one readable line. */
+export function describeParseFailure(cause: unknown): string {
   if (cause instanceof z.ZodError) {
     return cause.issues
       .map((issue) => `${issue.path.join('.') || 'frontmatter'}: ${issue.message}`)
@@ -303,6 +318,37 @@ function checkAgentCodexMapping(parsed: ParsedAgentFile): Issue[] {
   return issues;
 }
 
+/**
+ * Run every check against an agent whose frontmatter already parsed. `fileName`
+ * is the agent's filename without `.md`; without it the name/filename match is skipped.
+ */
+export function checkParsedAgent(parsed: ParsedAgentFile, fileName?: string): Issue[] {
+  const issues: Issue[] = [];
+  const { name, description } = parsed.frontmatter;
+
+  if (!NAME_PATTERN.test(name) || name.includes(':')) {
+    issues.push(error(`name \`${name}\` must be lowercase alphanumeric with hyphens (no colons)`));
+  }
+  if (fileName !== undefined && name !== fileName) {
+    issues.push(error(`name \`${name}\` must match its filename \`${fileName}.md\``));
+  }
+  if (description.trim().length === 0) {
+    issues.push(error('description must not be empty'));
+  }
+
+  issues.push(...windowsReservedName(name, 'agent'));
+  issues.push(
+    ...checkAgentAntiPatterns(parsed),
+    ...checkHookFields(parsed.frontmatter.hooks),
+    ...checkAgentBody(parsed),
+    ...checkAgentMcpServers(parsed),
+    ...checkCodexAgentTables(parsed),
+    ...checkAgentCodexMapping(parsed),
+  );
+
+  return issues;
+}
+
 /** Run every check against one source agent. */
 export function checkAgent(agent: SourceAgent): AgentReport {
   let parsed: ParsedAgentFile;
@@ -316,29 +362,7 @@ export function checkAgent(agent: SourceAgent): AgentReport {
     };
   }
 
-  const issues: Issue[] = [];
-  const { name, description } = parsed.frontmatter;
-
-  if (!NAME_PATTERN.test(name) || name.includes(':')) {
-    issues.push(error(`name \`${name}\` must be lowercase alphanumeric with hyphens (no colons)`));
-  }
-  if (name !== agent.name) {
-    issues.push(error(`name \`${name}\` must match its filename \`${agent.name}.md\``));
-  }
-  if (description.trim().length === 0) {
-    issues.push(error('description must not be empty'));
-  }
-
-  issues.push(...windowsReservedName(name, 'agent'));
-  issues.push(
-    ...checkHookFields(parsed.frontmatter.hooks),
-    ...checkAgentBody(parsed),
-    ...checkAgentMcpServers(parsed),
-    ...checkCodexAgentTables(parsed),
-    ...checkAgentCodexMapping(parsed),
-  );
-
-  return { name: agent.name, issues, parsed };
+  return { name: agent.name, issues: checkParsedAgent(parsed, agent.name), parsed };
 }
 
 /** Run the doctor across every source agent. */

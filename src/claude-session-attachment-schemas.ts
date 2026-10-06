@@ -74,3 +74,5 @@ export const claudeSessionAttachmentRecordSchema = transcriptRecord('attachment'
   renderedBesideToolResult: z.boolean().optional(),
   renderedRole: z.enum(['system', 'user']).optional(),
 });
+
+export type ClaudeSessionAttachmentRecord = z.infer<typeof claudeSessionAttachmentRecordSchema>;

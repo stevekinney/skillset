@@ -182,3 +182,7 @@ export const codexTurnContextPayloadSchema = z.looseObject({
   effort: reasoningEffortSchema.optional(),
   summary: reasoningSummarySchema,
 });
+
+export type CodexSessionMetaPayload = z.infer<typeof codexSessionMetaPayloadSchema>;
+
+export type CodexTurnContextPayload = z.infer<typeof codexTurnContextPayloadSchema>;

@@ -1,6 +1,6 @@
 {
   "name": "@lostgradient/skillset",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "description": "Compile one canonical set of agent skills, subagents, MCP servers, instructions, hooks, and model defaults into Claude Code and OpenAI Codex configuration.",
   "homepage": "https://github.com/stevekinney/skillset#readme",
   "bugs": "https://github.com/stevekinney/skillset/issues",
@@ -24,6 +24,24 @@
       "import": "./dist/node/claude-workflow-globals.js",
       "default": "./dist/node/claude-workflow-globals.js"
     },
+    "./hooks": {
+      "types": "./dist/entry-hooks.d.ts",
+      "bun": "./dist/bun/entry-hooks.js",
+      "import": "./dist/node/entry-hooks.js",
+      "default": "./dist/node/entry-hooks.js"
+    },
+    "./sessions": {
+      "types": "./dist/entry-sessions.d.ts",
+      "bun": "./dist/bun/entry-sessions.js",
+      "import": "./dist/node/entry-sessions.js",
+      "default": "./dist/node/entry-sessions.js"
+    },
+    "./workflows": {
+      "types": "./dist/entry-workflows.d.ts",
+      "bun": "./dist/bun/entry-workflows.js",
+      "import": "./dist/node/entry-workflows.js",
+      "default": "./dist/node/entry-workflows.js"
+    },
     "./package.json": "./package.json"
   },
   "main": "./dist/node/index.js",
@@ -32,6 +50,15 @@
     "*": {
       "workflow-globals": [
         "./dist/claude-workflow-globals.d.ts"
+      ],
+      "hooks": [
+        "./dist/entry-hooks.d.ts"
+      ],
+      "sessions": [
+        "./dist/entry-sessions.d.ts"
+      ],
+      "workflows": [
+        "./dist/entry-workflows.d.ts"
       ]
     }
   },
@@ -76,6 +103,7 @@
     "@modelcontextprotocol/sdk": "^1.30.0",
     "acorn": "^8.18.0",
     "chalk": "^6.0.0",
+    "gray-matter": "^4.0.3",
     "smol-toml": "^1.7.1",
     "yaml": "^2.9.0",
     "zod": "^4.4.3"

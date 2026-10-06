@@ -143,4 +143,87 @@ describe('public API', () => {
       ].toSorted(),
     );
   });
+
+  it('exports an inferred type for every public schema', async () => {
+    const indexText = await Bun.file(join(sourceDirectory, 'index.ts')).text();
+    const missing = Object.keys(publicApi)
+      .filter((name) => name.endsWith('Schema') && !name.startsWith('is'))
+      .map((name) => `${name[0]!.toUpperCase()}${name.slice(1, -'Schema'.length)}`)
+      .filter((typeName) => !new RegExp(`\\btype ${typeName}\\b`).test(indexText));
+
+    expect(missing).toEqual([]);
+  });
+
+  it('documents every public export in the README', async () => {
+    const readme = await Bun.file(join(sourceDirectory, '..', 'README.md')).text();
+    const indexText = await Bun.file(join(sourceDirectory, 'index.ts')).text();
+    const typeNames = [...indexText.matchAll(/\btype (\w+)/g)].map((match) => match[1]!);
+    const mentioned = (name: string) => new RegExp(`\\b${name}\\b`).test(readme);
+    // A type is documented by its own name or by the schema it is inferred from.
+    const documentedType = (name: string) =>
+      mentioned(name) || mentioned(`${name[0]!.toLowerCase()}${name.slice(1)}Schema`);
+    const undocumented = [
+      ...Object.keys(publicApi).filter((name) => !mentioned(name)),
+      ...typeNames.filter((name) => !documentedType(name)),
+    ];
+
+    expect(undocumented).toEqual([]);
+  });
+
+  describe('subpath entry points', () => {
+    const entries = ['hooks', 'sessions', 'workflows'] as const;
+
+    for (const name of entries) {
+      it(`./${name} re-exports the root's own values and nothing else`, async () => {
+        const entry: Record<string, unknown> = await import(`./entry-${name}.js`);
+        const names = Object.keys(entry);
+
+        expect(names.length).toBeGreaterThan(0);
+        for (const exported of names) {
+          expect((publicApi as Record<string, unknown>)[exported]).toBe(entry[exported]);
+        }
+      });
+    }
+
+    it('keeps the CLI and the config-reading modules out of every entry point', async () => {
+      for (const name of entries) {
+        const entry: Record<string, unknown> = await import(`./entry-${name}.js`);
+
+        for (const forbidden of ['runCli', 'environment', 'runSync', 'validateSkillMetadata']) {
+          expect(entry[forbidden]).toBeUndefined();
+        }
+      }
+    });
+
+    it('covers every hook, session, and workflow schema in some entry point', async () => {
+      const hooks = Object.keys(await import('./entry-hooks.js'));
+      const sessions = Object.keys(await import('./entry-sessions.js'));
+      const workflows = Object.keys(await import('./entry-workflows.js'));
+      const covered = new Set([...hooks, ...sessions, ...workflows]);
+      // `*HookSettings` validate the `hooks:` config block, which is a source format, not a payload.
+      const domain = /^(is|parse|safeParse)?(claude|codex|Claude|Codex)(Hook|Session|Workflow)/;
+      const missing = Object.keys(publicApi).filter(
+        (name) => domain.test(name) && !/HookSettings/.test(name) && !covered.has(name),
+      );
+
+      expect(missing).toEqual([]);
+    });
+
+    it('declares each entry point in package.json exports and typesVersions', async () => {
+      const manifest: {
+        exports: Record<string, Record<string, string>>;
+        typesVersions: Record<string, Record<string, string[]>>;
+      } = JSON.parse(await Bun.file(join(sourceDirectory, '..', 'package.json')).text());
+
+      for (const name of entries) {
+        expect(manifest.exports[`./${name}`]).toEqual({
+          types: `./dist/entry-${name}.d.ts`,
+          bun: `./dist/bun/entry-${name}.js`,
+          import: `./dist/node/entry-${name}.js`,
+          default: `./dist/node/entry-${name}.js`,
+        });
+        expect(manifest.typesVersions['*']?.[name]).toEqual([`./dist/entry-${name}.d.ts`]);
+      }
+    });
+  });
 });

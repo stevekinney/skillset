@@ -159,3 +159,7 @@ export function parseClaudeHookOutput(payload: unknown): ClaudeHookOutput | Clau
 export function safeParseClaudeHookOutput(payload: unknown) {
   return claudeHookOutputOrAsyncSchema.safeParse(payload);
 }
+
+export type ClaudeHookSpecificOutput = z.infer<typeof claudeHookSpecificOutputSchema>;
+
+export type ClaudeHookOutputOrAsync = z.infer<typeof claudeHookOutputOrAsyncSchema>;

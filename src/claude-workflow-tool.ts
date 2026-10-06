@@ -106,3 +106,5 @@ export const claudeWorkflowBudgetSchema = z.object({
   remaining: z.custom<() => number>((value) => typeof value === 'function'),
 });
 export type ClaudeWorkflowBudget = z.infer<typeof claudeWorkflowBudgetSchema>;
+
+export type ClaudeWorkflowRunId = z.infer<typeof claudeWorkflowRunIdSchema>;

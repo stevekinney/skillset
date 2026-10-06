@@ -195,6 +195,15 @@ export function isMapping(value: unknown): value is Record<string, unknown> {
 export function parseSkillFile(raw: string): ParsedSkillFile {
   const { mapping, body } = splitFrontmatter(raw);
 
+  return parseSkillMapping(mapping, body);
+}
+
+/**
+ * Validate an already-parsed frontmatter mapping against the union schema.
+ *
+ * @throws {z.ZodError} If the mapping fails the union schema.
+ */
+export function parseSkillMapping(mapping: Record<string, unknown>, body: string): ParsedSkillFile {
   const frontmatter = skillFrontmatterSchema.parse(mapping);
   const unknownKeys = Object.keys(mapping).filter((key) => !KNOWN_KEYS.has(key));
 

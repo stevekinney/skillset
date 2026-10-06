@@ -196,3 +196,5 @@ export const toolFields = {
   tool_use_id: z.string(),
   mcp_server: mcpServerSchema.optional(),
 };
+
+export type ClaudeCommonHookInput = z.infer<typeof claudeCommonHookInputSchema>;

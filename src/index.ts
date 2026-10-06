@@ -17,8 +17,10 @@ export {
 export {
   claudeAsyncHookOutputSchema,
   claudeHookOutputOrAsyncSchema,
+  type ClaudeHookOutputOrAsync,
   claudeHookOutputSchema,
   claudeHookSpecificOutputSchema,
+  type ClaudeHookSpecificOutput,
   claudeHookSpecificOutputSchemas,
   parseClaudeHookOutput,
   safeParseClaudeHookOutput,
@@ -27,6 +29,7 @@ export {
 } from './claude-hook-output-schemas.js';
 export {
   claudeCommonHookInputSchema,
+  type ClaudeCommonHookInput,
   claudeHookEventNames,
   claudePermissionUpdateSchema,
   claudeStopFailureErrors,
@@ -92,8 +95,11 @@ export {
 export {
   checkAgent,
   checkAgents,
+  checkParsedAgent,
+  checkParsedSkill,
   checkSkill,
   checkSkills,
+  describeParseFailure,
   hasErrors,
   type AgentReport,
   type Issue,
@@ -222,6 +228,7 @@ export {
 } from './type-guards.js';
 export {
   claudeSessionAttachmentRecordSchema,
+  type ClaudeSessionAttachmentRecord,
   claudeSessionAttachmentSchema,
   claudeSessionUnobservedAttachmentTypes,
   type ClaudeSessionAttachment,
@@ -235,7 +242,9 @@ export {
 } from './claude-session-content-blocks.js';
 export {
   claudeSessionAssistantRecordSchema,
+  type ClaudeSessionAssistantRecord,
   claudeSessionUserRecordSchema,
+  type ClaudeSessionUserRecord,
 } from './claude-session-conversation-schemas.js';
 export {
   ClaudeSessionJsonlError,
@@ -274,6 +283,7 @@ export {
 export { claudeSessionStateRecordSchemas } from './claude-session-state-schemas.js';
 export {
   claudeSessionSystemRecordSchema,
+  type ClaudeSessionSystemRecord,
   claudeSessionSystemRecordSchemas,
   claudeSessionUnobservedSystemSubtypes,
 } from './claude-session-system-schemas.js';
@@ -352,6 +362,7 @@ export {
   claudeWorkflowMaximumItems,
   claudeWorkflowReferenceSchema,
   claudeWorkflowRunIdSchema,
+  type ClaudeWorkflowRunId,
   claudeWorkflowToolInputSchema,
   claudeWorkflowToolOutputSchema,
   type ClaudeWorkflowBudget,
@@ -359,7 +370,10 @@ export {
   type ClaudeWorkflowToolInput,
   type ClaudeWorkflowToolOutput,
 } from './claude-workflow-tool.js';
-export { codexCompactedPayloadSchema } from './codex-session-compaction.js';
+export {
+  codexCompactedPayloadSchema,
+  type CodexCompactedPayload,
+} from './codex-session-compaction.js';
 export {
   codexEventMessageSchema,
   codexEventMessageSchemas,
@@ -374,7 +388,9 @@ export {
 } from './codex-session-jsonl.js';
 export {
   codexSessionMetaPayloadSchema,
+  type CodexSessionMetaPayload,
   codexTurnContextPayloadSchema,
+  type CodexTurnContextPayload,
 } from './codex-session-metadata.js';
 export {
   codexResponseItemTypes,
@@ -393,3 +409,10 @@ export {
 } from './codex-session-records.js';
 export { codexResponseItemSchema, type CodexResponseItem } from './codex-session-response-items.js';
 export { codexTurnItemSchema, type CodexTurnItem } from './codex-session-turn-items.js';
+export {
+  validateSkillMetadata,
+  validateSubagentMetadata,
+  type MetadataValidation,
+  type ValidateSkillMetadataOptions,
+  type ValidateSubagentMetadataOptions,
+} from './validate-metadata.js';

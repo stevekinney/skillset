@@ -129,3 +129,7 @@ export const claudeSessionUserRecordSchema = transcriptRecord('user', {
   // The MCP result's `_meta` and `structuredContent`: defined by each MCP server, not Claude Code.
   mcpMeta: looseRecord.optional(),
 });
+
+export type ClaudeSessionAssistantRecord = z.infer<typeof claudeSessionAssistantRecordSchema>;
+
+export type ClaudeSessionUserRecord = z.infer<typeof claudeSessionUserRecordSchema>;

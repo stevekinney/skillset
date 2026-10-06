@@ -167,3 +167,5 @@ export const claudeSessionSystemRecordSchema = z.discriminatedUnion('subtype', [
     ...systemFields,
   }),
 ]);
+
+export type ClaudeSessionSystemRecord = z.infer<typeof claudeSessionSystemRecordSchema>;

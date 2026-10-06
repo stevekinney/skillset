@@ -74,6 +74,9 @@ bun run package:check    # Run publint + @arethetypeswrong/cli on packed tarball
 - `fallback.ts` — Codex-only prose rewrites of Claude dynamic features.
 - `emit.ts` — skill compilation (frontmatter + body + generated marker + openai.yaml).
 - `doctor.ts` — skill and agent validation; errors block sync.
+- `doctor-anti-patterns.ts` — warnings for valid-but-suspect skill and agent frontmatter (vague name, first-person description, `bypassPermissions`, a tool both allowed and denied).
+- `validate-metadata.ts` — `validateSkillMetadata`/`validateSubagentMetadata`: parse one file with gray-matter (executable engines disabled), then run the doctor rules via `checkParsedSkill`/`checkParsedAgent`. Also warns when gray-matter and the `yaml` package read the block differently.
+- `entry-hooks.ts` / `entry-sessions.ts` / `entry-workflows.ts` — the `./hooks`, `./sessions`, and `./workflows` subpath entry points. They re-export a slice of `index.ts` and must never import `environment.ts` (the root reads config files at load). `public-api.test.ts` checks each is a subset of the root; the build uses `splitting` so they share one copy of each schema.
 - `hook-schema.ts` — both tools' hook event sets, Claude Code's hook settings schema (skill/agent frontmatter `hooks`), and Codex's hook handler and settings schema (`hooks.yaml` doctor, `codex.hooks`).
 - `agent-codex-checks.ts` — doctor checks for the agent `codex.hooks`/`codex.skills`/`codex.tools` tables.
 - `codex-agent-tables.ts` — Codex's `[skills]` and `[tools]` tables for the agent `codex:` block, plus their doctor helpers.

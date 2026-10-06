@@ -1,7 +1,14 @@
 import { $ } from 'bun';
 import pkg from '../package.json' with { type: 'json' };
 
-const entrypoints = ['./src/index.ts', './src/bin.ts', './src/claude-workflow-globals.ts'];
+const entrypoints = [
+  './src/index.ts',
+  './src/bin.ts',
+  './src/claude-workflow-globals.ts',
+  './src/entry-hooks.ts',
+  './src/entry-sessions.ts',
+  './src/entry-workflows.ts',
+];
 const external = Array.from(
   new Set([
     ...Object.keys(
@@ -30,6 +37,9 @@ await Promise.all(
       outdir: `./dist/${target}`,
       target,
       format: 'esm',
+      // Shared modules go into chunks, so the entry points and the root use one copy
+      // of every schema and error class.
+      splitting: true,
       naming: '[dir]/[name].js',
       sourcemap: 'linked',
       minify: false,

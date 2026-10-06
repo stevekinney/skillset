@@ -164,6 +164,15 @@ export type ParsedAgentFile = {
 export function parseAgentFile(raw: string): ParsedAgentFile {
   const { mapping, body } = splitFrontmatter(raw);
 
+  return parseAgentMapping(mapping, body);
+}
+
+/**
+ * Validate an already-parsed frontmatter mapping against the union schema.
+ *
+ * @throws {z.ZodError} If the mapping fails the union schema.
+ */
+export function parseAgentMapping(mapping: Record<string, unknown>, body: string): ParsedAgentFile {
   const frontmatter = agentFrontmatterSchema.parse(mapping);
   const unknownKeys = Object.keys(mapping).filter((key) => !KNOWN_AGENT_KEYS.has(key));
 
