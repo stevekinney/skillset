@@ -152,12 +152,17 @@ export const looseRecord = z.record(z.string(), z.unknown());
 /**
  * Where a user-side message came from, on `user` records and `queued_command`
  * attachments: the human at the keyboard, a task notification, a coordinator,
- * a channel, an observer, or another session (`peer`). Shaped after the
+ * a channel, a plugin, an observer, or another session (`peer`). Shaped after the
  * binary's own `origin` schema, with the extra peer fields real sessions carry.
  */
 export const messageOrigin = z.discriminatedUnion('kind', [
   z.looseObject({ kind: z.literal('human') }),
   z.looseObject({ kind: z.literal('channel'), server: z.string() }),
+  z.looseObject({
+    kind: z.literal('plugin'),
+    name: z.string(),
+    asUser: z.literal(true).optional(),
+  }),
   z.looseObject({
     kind: z.literal('peer'),
     from: z.string(),
@@ -176,8 +181,16 @@ export const messageOrigin = z.discriminatedUnion('kind', [
   z.looseObject({
     kind: z.literal('task-notification'),
     subkind: z
-      .enum(['scheduled-trigger', 'peer-send-message', 'projects-relay', 'session-inbox'])
+      .enum([
+        'scheduled-trigger',
+        'peer-send-message',
+        'projects-relay',
+        'session-inbox',
+        'external-event',
+      ])
       .optional(),
+    // The run of the background task that produced this saved notification.
+    runId: z.string().optional(),
     // Why a scheduled trigger fired: a short lowercase token (`scheduled`, `manual`, `retry`, ...).
     fireReason: z.string().optional(),
     // `session-task` when the notification reports on work this session itself launched.

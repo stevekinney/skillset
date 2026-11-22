@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'bun:test';
 
+import { isCodexPostModelRequestMcpStructuredContent } from './type-guards.js';
+
 import {
   codexHookEventNames,
   codexHookInputSchemas,
   codexHookOutputSchemas,
+  codexPostModelRequestMcpStructuredContentSchema,
   parseCodexHookInput,
   parseCodexHookOutput,
   safeParseCodexHookInput,
@@ -13,6 +16,20 @@ import {
 
 const base = { session_id: 's', transcript_path: null, cwd: '/w' };
 const turn = { ...base, model: 'gpt', turn_id: 't' };
+const modelRequest = {
+  ...turn,
+  kind: 'sampling' as const,
+  request_id: 'request',
+  attempt_number: 1,
+  thread_id: 'thread',
+};
+const tokenUsage = {
+  input_tokens: 12,
+  cached_input_tokens: 2,
+  output_tokens: 4,
+  reasoning_output_tokens: 1,
+  total_tokens: 16,
+};
 const mode = { permission_mode: 'default' };
 const tool = { ...turn, ...mode, tool_name: 'Bash', tool_input: { command: 'ls' } };
 
@@ -26,6 +43,14 @@ const samples: Record<(typeof codexHookEventNames)[number], Record<string, unkno
   PostToolUse: { ...tool, tool_use_id: 'u', tool_response: 'ok' },
   PreCompact: { ...turn, trigger: 'manual' },
   PostCompact: { ...turn, trigger: 'auto', agent_type: 'x' },
+  PreModelRequest: modelRequest,
+  PostModelRequest: {
+    ...modelRequest,
+    status: 'completed',
+    error: null,
+    response_id: 'response',
+    token_usage: tokenUsage,
+  },
   Stop: { ...turn, ...mode, stop_hook_active: false, last_assistant_message: null },
   SubagentStop: {
     ...turn,
@@ -40,8 +65,8 @@ const samples: Record<(typeof codexHookEventNames)[number], Record<string, unkno
 };
 
 describe('Codex hook input schemas', () => {
-  it('covers all 12 events', () => {
-    expect(codexHookEventNames).toHaveLength(12);
+  it('covers all 14 events', () => {
+    expect(codexHookEventNames).toHaveLength(14);
     expect(Object.keys(codexHookInputSchemas).toSorted()).toEqual(
       [...codexHookEventNames].toSorted(),
     );
@@ -59,6 +84,57 @@ describe('Codex hook input schemas', () => {
       expect(safeParseCodexHookInput({ ...rest, hook_event_name: name }).success).toBe(false);
     });
   }
+
+  it('parses a failed compaction attempt with nullable outcome fields and a subagent', () => {
+    const input = {
+      ...modelRequest,
+      kind: 'background_compaction',
+      attempt_number: 2,
+      agent_id: 'subagent',
+      agent_type: 'reviewer',
+      hook_event_name: 'PostModelRequest',
+      status: 'failed',
+      error: 'provider error',
+      response_id: null,
+      token_usage: null,
+    } satisfies CodexHookInputFor<'PostModelRequest'>;
+    const parsed = parseCodexHookInput(input);
+    expect(parsed.hook_event_name).toBe('PostModelRequest');
+    if (parsed.hook_event_name !== 'PostModelRequest') throw new Error('Expected post request');
+    const payload: CodexHookInputFor<'PostModelRequest'> = parsed;
+    expect(payload).toEqual(input);
+    expect(payload.status).toBe('failed');
+  });
+
+  it('enforces request fields, outcome fields, and integer token counts', () => {
+    const pre = { ...modelRequest, hook_event_name: 'PreModelRequest' };
+    const post = {
+      ...modelRequest,
+      hook_event_name: 'PostModelRequest',
+      status: 'completed',
+      error: null,
+      response_id: 'response',
+      token_usage: tokenUsage,
+    } satisfies CodexHookInputFor<'PostModelRequest'>;
+    for (const invalid of [
+      { ...pre, request_id: undefined },
+      { ...pre, attempt_number: -1 },
+      { ...pre, attempt_number: 1.5 },
+      { ...pre, kind: 'other' },
+      { ...post, status: 'pending' },
+      { ...post, error: undefined },
+      { ...post, response_id: undefined },
+      { ...post, token_usage: undefined },
+      { ...post, token_usage: { ...tokenUsage, total_tokens: 1.5 } },
+    ]) {
+      expect(safeParseCodexHookInput(invalid).success).toBe(false);
+    }
+    const usage = { ...tokenUsage, cache_write_input_tokens: 3, future: 1 };
+    expect(parseCodexHookInput({ ...post, token_usage: usage })).toEqual({
+      ...post,
+      token_usage: usage,
+    });
+  });
 
   it('requires a null or string transcript_path key', () => {
     const { transcript_path: _omitted, ...rest } = samples['Stop'];
@@ -176,6 +252,13 @@ describe('Codex hook output schemas', () => {
     });
   }
 
+  it('preserves diagnostic model-request stdout without treating it as a directive', () => {
+    expect(parseCodexHookOutput('PreModelRequest', 'observed')).toBe('observed');
+    expect(parseCodexHookOutput('PostModelRequest', { continue: false })).toEqual({
+      continue: false,
+    });
+  });
+
   it('returns the output type of the event it parsed', () => {
     const stop = parseCodexHookOutput('Stop', { decision: 'block', reason: 'again' });
     const decision: 'block' | undefined = stop.decision;
@@ -192,5 +275,34 @@ describe('safeParseCodexHookOutput', () => {
     const result = safeParseCodexHookOutput('Stop', { decision: 'block', reason: 'again' });
     expect(result.success && result.data.decision).toBe('block');
     expect(safeParseCodexHookOutput('PreToolUse', { suppressOutput: true }).success).toBe(false);
+  });
+});
+
+describe('Codex post-model-request MCP structured content', () => {
+  it('accepts null, omitted pricing, or a finite nonnegative charge', () => {
+    const schema = codexPostModelRequestMcpStructuredContentSchema;
+    for (const output of [null, {}, { extra_codex_rollout_budget_units: 0 }]) {
+      expect(schema.parse(output)).toEqual(output);
+    }
+    const priced = { extra_codex_rollout_budget_units: 0.25, source: 'usage' };
+    expect(schema.parse(priced)).toEqual(priced);
+    expect(isCodexPostModelRequestMcpStructuredContent(priced)).toBe(true);
+    expect(
+      isCodexPostModelRequestMcpStructuredContent({ extra_codex_rollout_budget_units: -1 }),
+    ).toBe(false);
+  });
+
+  it('rejects nonobjects and invalid prices', () => {
+    const schema = codexPostModelRequestMcpStructuredContentSchema;
+    for (const output of [
+      [],
+      'text',
+      { extra_codex_rollout_budget_units: '1' },
+      { extra_codex_rollout_budget_units: -1 },
+      { extra_codex_rollout_budget_units: Infinity },
+      { extra_codex_rollout_budget_units: null },
+    ]) {
+      expect(schema.safeParse(output).success).toBe(false);
+    }
   });
 });

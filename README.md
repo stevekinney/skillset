@@ -43,9 +43,15 @@ Each schema is exported with its inferred type (the same name without `Schema`):
 - Codex tables: `codexSkillsSchema` and `codexToolsSchema` for the `[skills]` and `[tools]` tables.
 - Effort: `claudeEffortSchema` for skill and subagent `effort` (a level or an integer budget), and `claudeSettingsEffortSchema` for settings.json `effortLevel`, which accepts fewer values.
 
+## Standalone JSON Schemas
+
+Use `@lostgradient/skillset/schemas/claude-code.json` and `@lostgradient/skillset/schemas/codex.json` with a [JSON Schema Draft 2020-12](https://json-schema.org/draft/2020-12) validator. Each file validates one session record at its root. To validate a configuration object or a hook payload, point your validator at the appropriate `$defs` entry, such as `#/$defs/claudeSkillFrontmatterSchema` or `#/$defs/codexHookInputSchemas.PreModelRequest`, with the whole file loaded so references resolve.
+
+These files describe parsed JSON values. Use the TypeScript validators if you need YAML or TOML parsing, value coercion, or cross-field checks. The workflow budget API contains functions and is available through `claudeWorkflowBudgetSchema`.
+
 ## Type guards
 
-Each top-level schema has a matching type guard that narrows an `unknown`: `isClaudeSkillFrontmatter`, `isCodexSkillFrontmatter`, `isClaudeAgentFrontmatter`, `isCodexAgent`, `isOpenaiConfiguration`, `isClaudeMcpServer`, `isClaudeAgentMcpServer`, `isCodexMcpServer`, `isClaudeHookSettings`, `isCodexHookSettings`, `isCodexSkills`, `isCodexTools`, `isClaudeEffort`, and `isClaudeSettingsEffort`, plus the hook, session, and workflow guards below. Guards narrow to the schema's input type (`z.input`), because a few schemas convert values while parsing (skill booleans accept `"yes"`), so a value that passes a guard still has its original shape. Parse with the schema to get converted values. Nested building-block schemas (one record type, one content block) have no guard of their own; use the `...For` guard of the union they belong to.
+Each top-level schema has a matching type guard that narrows an `unknown`: `isClaudeSkillFrontmatter`, `isCodexSkillFrontmatter`, `isClaudeAgentFrontmatter`, `isCodexAgent`, `isOpenaiConfiguration`, `isClaudeMcpServer`, `isClaudeAgentMcpServer`, `isCodexMcpServer`, `isClaudeHookSettings`, `isCodexHookSettings`, `isCodexSkills`, `isCodexTools`, `isClaudeEffort`, and `isClaudeSettingsEffort`, plus the hook, session, and workflow guards below. Guards narrow to the schema's input type (`z.input`), because a few schemas convert values while parsing (skill booleans accept `"yes"`), so a value that passes a guard still has its original shape. Parse with the schema to get converted values. Each public schema also has a corresponding parsed output type. Public maps expose keyed types and `...For` guards. The installed-package check verifies each contract in Node and Bun.
 
 ## Subpath imports
 
@@ -87,6 +93,8 @@ if (input.hook_event_name === 'PreToolUse' && input.tool_name === 'Bash') {
 }
 ```
 
+- Hook exports also include `codexPostModelRequestMcpStructuredContentSchema`, `isClaudeAsyncHookOutput`, `isClaudeCommonHookInput`, `isClaudeHookOutputOrAsync`, `isClaudeHookSpecificOutput`, `isClaudeHookSpecificOutputFor`, `isClaudePermissionUpdate`, `isClaudeSyncHookOutput`, `isCodexPostModelRequestMcpStructuredContent`, `ClaudeHookSpecificOutputFor`, `CodexPostModelRequestMcpStructuredContent`.
+
 ## Session transcripts
 
 - **Claude Code** stores each session as JSONL under `~/.claude/projects/<project>/`, including the transcripts its subagents and workflows write under `<session-id>/subagents/`. `claudeSessionRecordSchema` validates one line: a union of every record type, with a per-type map in `claudeSessionRecordSchemas` and the names in `claudeSessionRecordTypeNames`. `parseClaudeSessionRecord`/`safeParseClaudeSessionRecord` check one record, and `parseClaudeSessionJsonl`/`safeParseClaudeSessionJsonl` check a whole file and report the failing line number. A workflow's `journal.jsonl` holds different records, which `claudeWorkflowJournalRecordSchema` covers (per-type schemas in `claudeWorkflowJournalRecordSchemas`, checked with `parseClaudeWorkflowJournalRecord`/`safeParseClaudeWorkflowJournalRecord`). `parseClaudeSessionJsonl` throws a `ClaudeSessionJsonlError` carrying every failing line.
@@ -96,6 +104,8 @@ if (input.hook_event_name === 'PreToolUse' && input.tool_name === 'Bash') {
 - Type guards: `isClaudeSessionRecord`, `isClaudeWorkflowJournalRecord`, and `isCodexSessionRecord` check one record, and `isClaudeSessionRecordFor(type, value)` and `isCodexSessionRecordFor(type, value)` narrow to one record type.
 - Fields with a closed set of values are literal unions. A few Codex fields can hold values beyond the known list (`reasoning_effort`, for example), so their type keeps the known values for autocomplete and still accepts any other string. Records are loose objects, so a field a newer version adds never fails a parse. The handful of spots modeled as `unknown`, such as a tool's input, are listed with reasons in each module's comment.
 - The schemas were checked against every session file on the development machine: 4,140 Claude Code files (1.1 million records, versions 2.1.221 through 2.1.289) and 10,102 Codex files (4.9 million records). `bun run check:claude-sessions` and `bun run check:codex-sessions` rerun those checks against your own sessions. They report parse failures and fields the schema doesn't model, but never record content.
+
+- Session exports also include `codexDynamicToolsUpdatedPayloadSchema`, `isClaudeSessionAssistantContentBlock`, `isClaudeSessionAssistantMessage`, `isClaudeSessionAssistantRecord`, `isClaudeSessionAttachment`, `isClaudeSessionAttachmentRecord`, `isClaudeSessionStateRecordFor`, `isClaudeSessionSystemRecord`, `isClaudeSessionSystemRecordFor`, `isClaudeSessionToolUseResult`, `isClaudeSessionUsage`, `isClaudeSessionUserContentBlock`, `isClaudeSessionUserMessage`, `isClaudeSessionUserRecord`, `isCodexCompactedPayload`, `isCodexDynamicToolsUpdatedPayload`, `isCodexEventMessage`, `isCodexEventMessageFor`, `isCodexResponseItem`, `isCodexSessionMetaPayload`, `isCodexTurnContextPayload`, `isCodexTurnItem`, `ClaudeSessionStateRecordFor`, `ClaudeSessionSystemRecordFor`, `CodexDynamicToolsUpdatedPayload`.
 
 ## Workflow scripts
 
@@ -127,6 +137,8 @@ const audits = await pipeline(found?.files ?? [], (file) =>
 - Two things TypeScript cannot be taught: a top-level `return` is valid in a workflow script but reported as an error (TS1108) in a module, so put `// @ts-ignore` above it, and `args` is typed `any`, because its shape comes from whoever launches the workflow. Set `"module": "esnext"`, `"moduleResolution": "bundler"`, and `"allowJs": true` with `"checkJs": true` in a `jsconfig.json` to check scripts without a per-file comment.
 - The schemas and helpers were checked against every workflow on the development machine: 56 executed scripts, 14 helper files that were never run, 264 run records, 302 `Workflow` tool calls and 295 results in 121 session transcripts, and 503 `agent()` option objects. Claude Code's verdict on each of the 52 inline scripts (accepted or rejected) matched the verdict of `parseClaudeWorkflowMeta` and `findClaudeWorkflowForbiddenApis` every time (Claude Code refuses a script at launch for its `meta`, syntax, and use of those APIs, and nothing else). `bun run check:workflows` reruns the check against your own workflows. It reports counts, schema issue paths, and file:line locations, never script content.
 - `agent()` also reads `disallowedTools`, `bashCommandClamp`, and `stallMs`, which the documented API does not mention; the options schema accepts them but treat them as unstable. `agent({ isolation: 'remote' })` parses but throws in the current build, so the schema rejects it.
+
+- Workflow exports also include `isClaudeWorkflowEffort`, `isClaudeWorkflowIsolation`, `isClaudeWorkflowJournalRecordFor`, `isClaudeWorkflowPhase`, `isClaudeWorkflowProgressAgent`, `isClaudeWorkflowProgressPhase`, `isClaudeWorkflowProgressRow`, `isClaudeWorkflowRunId`.
 
 ## Other types
 

@@ -74,6 +74,8 @@ const fixtures: Record<string, Record<string, unknown>> = {
         outputTokens: 2,
         cacheReadInputTokens: 3,
         cacheCreationInputTokens: 4,
+        cacheCreationEphemeral1hInputTokens: 0,
+        cacheCreationEphemeral5mInputTokens: 4,
         webSearchRequests: 0,
         costUSD: 0.5,
       },
@@ -129,7 +131,19 @@ const fixtures: Record<string, Record<string, unknown>> = {
   'content-replacement': { sessionId, replacements: [{ kind: 'x' }] },
   'api-request-shape': { sessionId, shapeHash: 'h', timestamp: 't', version: 1, shape: {} },
   'api-request-blob': { sessionId, hash: 'h', message: {} },
-  'api-request': { sessionId, id: 'r-1', timestamp: 't', version: 1, params: {} },
+  'api-request': {
+    sessionId,
+    id: 'r-1',
+    timestamp: 't',
+    version: 1,
+    params: {},
+    keep: 0,
+    tail: ['message-hash'],
+    cacheControl: [
+      { path: ['messages', 0, 'content', 0], value: { type: 'ephemeral', ttl: '5m' } },
+    ],
+    requestDigest: 'fixture-digest',
+  },
   'artifact-comment-monitor': { sessionId, v: 1, artifacts: [] },
   'artifact-autoreact-ledger': { sessionId, v: 1, artifacts: [] },
 };
@@ -173,6 +187,15 @@ describe('claudeSessionRecordSchemas', () => {
     if (record.type === 'permission-mode') expect(record.permissionMode).toBe('dontAsk');
     const typed: ClaudeSessionRecordFor<'mode'> = { type: 'mode', sessionId, mode: 'coordinator' };
     expect(claudeSessionRecordSchemas.mode.parse(typed).mode).toBe('coordinator');
+  });
+
+  it('reads an optional base request ID on saved request deltas', () => {
+    const request = { type: 'api-request', ...fixtures['api-request'] };
+    expect(safeParseClaudeSessionRecord(request).success).toBe(true);
+    expect(parseClaudeSessionRecord({ ...request, base: 'earlier-request' })).toMatchObject({
+      base: 'earlier-request',
+    });
+    expect(safeParseClaudeSessionRecord({ ...request, base: 1 }).success).toBe(false);
   });
 });
 

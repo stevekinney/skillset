@@ -5,6 +5,13 @@ import { join } from 'node:path';
 import { $ } from 'bun';
 
 import pkg from '../package.json' with { type: 'json' };
+import * as sourceApi from '../src/index.js';
+import {
+  publicSchemaContracts,
+  publicSchemaRuntimeFixture,
+  publicSchemaTypeFixture,
+} from './public-schema-contract.js';
+import { verifyPackedProviderJsonSchemas } from './verify-provider-json-schemas.js';
 
 /**
  * Type-check the packed tarball the way a consumer would.
@@ -18,7 +25,8 @@ import pkg from '../package.json' with { type: 'json' };
  * So this packs the package, installs the tarball into a throwaway directory,
  * and runs `tsc` over a fixture that imports each typed export subpath with
  * `skipLibCheck: false` — which forces the whole declaration graph to be
- * checked rather than trusted.
+ * checked rather than trusted. A second fixture checks every public schema's
+ * named output type and input guard, then loads the bindings in Node and Bun.
  *
  * This costs a pack, an install, and a compile on every `validate`. That is
  * deliberate: it is the only check here that fails when the published types
@@ -114,6 +122,7 @@ const specifiers = subpaths.map((subpath) =>
   subpath === '.' ? manifest.name : `${manifest.name}${subpath.slice(1)}`,
 );
 
+const schemaContracts = subpaths.includes('.') ? publicSchemaContracts(sourceApi) : [];
 const packed = await $`npm pack --silent`.text();
 const tarball = packed.trim().split('\n').at(-1);
 if (tarball === undefined || tarball.length === 0) {
@@ -150,7 +159,7 @@ try {
           // it fails for a reason unrelated to the package.
           types: ['node'],
         },
-        files: ['check.ts'],
+        files: ['check.ts', 'schemas.ts'],
       },
       undefined,
       2,
@@ -158,6 +167,10 @@ try {
   );
 
   await writeFile(join(directory, 'check.ts'), fixture(specifiers));
+  await writeFile(
+    join(directory, 'schemas.ts'),
+    publicSchemaTypeFixture(manifest.name, schemaContracts),
+  );
 
   // npm, not bun: this simulates an npm consumer installing the published
   // artifact, and avoids any workspace or link resolution leaking in.
@@ -169,6 +182,8 @@ try {
   await $`npm install --silent --no-audit --no-fund ${tarballPath} typescript @types/node ${peers}`.cwd(
     directory,
   );
+
+  await verifyPackedProviderJsonSchemas(directory, manifest.name);
 
   await $`npx tsc --project tsconfig.json`.cwd(directory);
 
@@ -224,6 +239,16 @@ try {
         }
       }
     `}`.cwd(directory);
+  }
+
+  if (schemaContracts.length > 0) {
+    const path = join(directory, 'public-schemas.js');
+    await writeFile(path, publicSchemaRuntimeFixture(manifest.name, schemaContracts));
+    await $`node ${path}`.cwd(directory);
+    await $`bun ${path}`.cwd(directory);
+    console.log(
+      `Verified ${schemaContracts.length} public schema contracts in the packed package.`,
+    );
   }
 
   console.log(`Package types and runtime imports verified for ${specifiers.join(', ')}.`);

@@ -16,7 +16,7 @@ import { z } from 'zod';
 /** The role of a message. `system` is the Responses API spelling Codex also accepts. */
 export const messageRoleSchema = z.enum(['user', 'assistant', 'developer', 'system']);
 
-export const messagePhaseSchema = z.enum(['commentary', 'final_answer']);
+export const messagePhaseSchema = z.enum(['commentary', 'partial_answer', 'final_answer']);
 
 export const imageDetailSchema = z.enum(['auto', 'low', 'high', 'original']);
 
@@ -31,7 +31,14 @@ const imageShape = {
 
 const inputText = z.looseObject({ type: z.literal('input_text'), ...textShape });
 const inputImage = z.looseObject({ type: z.literal('input_image'), ...imageShape });
-const inputAudio = z.looseObject({ type: z.literal('input_audio'), audio_url: z.string() });
+/** A flattened Codex AudioReference with an inline URL or an uploaded file ID. */
+export const audioReferenceSchema = z
+  .looseObject({ audio_url: z.string().optional(), file_id: z.string().optional() })
+  .refine(({ audio_url, file_id }) => audio_url !== undefined || file_id !== undefined, {
+    message: 'Expected an audio_url or file_id',
+  });
+
+const inputAudio = audioReferenceSchema.safeExtend({ type: z.literal('input_audio') });
 const encryptedContent = z.looseObject({
   type: z.literal('encrypted_content'),
   encrypted_content: z.string(),
@@ -42,7 +49,13 @@ export const messageContentItemSchema = z.discriminatedUnion('type', [
   inputText,
   inputImage,
   inputAudio,
-  z.looseObject({ type: z.literal('output_text'), ...textShape }),
+  z.looseObject({
+    type: z.literal('output_text'),
+    ...textShape,
+    // Provider-specific JSON metadata is replayed verbatim.
+    annotations: z.array(z.unknown()).optional(),
+    logprobs: z.array(z.unknown()).optional(),
+  }),
 ]);
 
 /** `FunctionCallOutputContentItem`: what a structured tool output holds. */
@@ -77,6 +90,22 @@ export const internalMessageMetadataSchema = z.looseObject({
   turn_id: z.string().optional(),
   create_time: z.number().optional(),
   content_item_kinds: z.array(z.string()).optional(),
+  content_item_metadata: z
+    .array(
+      z.looseObject({
+        provenance: z
+          .looseObject({
+            type: z.string(),
+            from_additional_requirements: z.boolean().optional(),
+            hook: z.boolean().optional(),
+            namespace: z.string().optional(),
+          })
+          .optional(),
+        harness_injected: z.boolean().optional(),
+        source_tool_namespace: z.string().optional(),
+      }),
+    )
+    .optional(),
   cell_id: z.string().optional(),
   executed_tool_calls: z.array(executedToolCallSchema).optional(),
   tool_calls_complete: z.boolean().optional(),
@@ -132,6 +161,9 @@ export const senderUserMessagesSchema = z.looseObject({
  * inside a compaction's `guardian_history`, and in `replacement_history_metadata`.
  */
 export const harnessMetadataSchema = z.looseObject({
+  history_sequence: z.int().nonnegative().optional(),
+  sampled_through_sequence: z.int().nonnegative().optional(),
+  model_search_state: z.string().optional(),
   guardian_sources: z.array(retainedSourceSchema).optional(),
   guardian_source_order_guidance: z.boolean().optional(),
   retained_source: retainedSourceSchema.optional(),

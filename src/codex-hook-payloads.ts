@@ -1,21 +1,22 @@
 import { z } from 'zod';
 
 /**
- * Zod schemas for the JSON Codex 0.160.0 writes to a hook's stdin and the
+ * Zod schemas for the JSON Codex 0.171.0 writes to a hook's stdin and the
  * JSON a hook may print to stdout, one pair per lifecycle event.
  *
  * Inputs are `z.looseObject`: Codex only serializes them, and later versions
  * may add fields, so an unknown key must not fail a parse. Outputs are
  * `z.strictObject`, mirroring Codex's `deny_unknown_fields`: one unknown key
  * anywhere in a hook's stdout makes Codex mark the whole run Failed, so a
- * strict schema is how an author finds that out before Codex does.
+ * strict schema is how an author finds that out before Codex does. Events
+ * whose stdout is never parsed use an unknown schema.
  *
  * Sources: the generated JSON schemas in `codex-rs/hooks/schema/generated`,
- * the serde structs, and the hooks docs at `rust-v0.160.0` (verified
- * 2026-10-03).
+ * the serde structs, and the hooks docs at `rust-v0.171.0` (verified
+ * 2026-11-21 for model-request hooks).
  */
 
-/** Every lifecycle event Codex 0.160.0 emits. */
+/** Every lifecycle event Codex 0.171.0 emits. */
 export const codexHookEventNames = [
   'SessionStart',
   'SessionEnd',
@@ -26,6 +27,8 @@ export const codexHookEventNames = [
   'PostToolUse',
   'PreCompact',
   'PostCompact',
+  'PreModelRequest',
+  'PostModelRequest',
   'Stop',
   'SubagentStop',
   'Interrupt',
@@ -77,6 +80,24 @@ const toolInputShape = {
   tool_input: z.unknown(),
 };
 
+const modelRequestShape = {
+  ...turnShape,
+  ...optionalAgentShape,
+  kind: z.enum(['sampling', 'foreground_compaction', 'background_compaction']),
+  request_id: z.string(),
+  thread_id: z.string(),
+  attempt_number: z.uint32(),
+};
+
+const modelRequestTokenUsage = z.looseObject({
+  input_tokens: z.int(),
+  cached_input_tokens: z.int(),
+  cache_write_input_tokens: z.int().optional(),
+  output_tokens: z.int(),
+  reasoning_output_tokens: z.int(),
+  total_tokens: z.int(),
+});
+
 /** stdin schema for each Codex hook event, keyed by `hook_event_name`. */
 export const codexHookInputSchemas = {
   SessionStart: inputFor('SessionStart', {
@@ -118,6 +139,14 @@ export const codexHookInputSchemas = {
     ...optionalAgentShape,
     trigger: compactTriggerSchema,
   }),
+  PreModelRequest: inputFor('PreModelRequest', modelRequestShape),
+  PostModelRequest: inputFor('PostModelRequest', {
+    ...modelRequestShape,
+    status: z.enum(['completed', 'failed', 'cancelled']),
+    error: z.string().nullable(),
+    response_id: z.string().nullable(),
+    token_usage: modelRequestTokenUsage.nullable(),
+  }),
   Stop: inputFor('Stop', {
     ...turnShape,
     permission_mode: permissionModeSchema,
@@ -148,6 +177,8 @@ export const codexHookInputSchema = z.discriminatedUnion('hook_event_name', [
   codexHookInputSchemas.PostToolUse,
   codexHookInputSchemas.PreCompact,
   codexHookInputSchemas.PostCompact,
+  codexHookInputSchemas.PreModelRequest,
+  codexHookInputSchemas.PostModelRequest,
   codexHookInputSchemas.Stop,
   codexHookInputSchemas.SubagentStop,
   codexHookInputSchemas.Interrupt,
@@ -210,8 +241,8 @@ const stopOutput = z.strictObject({ ...universalOutputShape, ...blockDecisionSha
  * non-empty `reason`, PreToolUse `allow` needs `updatedInput`, and so on) are
  * documented in the README, not enforced here.
  *
- * SessionEnd has no output schema: Codex never parses its stdout, so any value
- * is accepted.
+ * Codex never parses command stdout for SessionEnd or either model-request
+ * event. Structured MCP tool results use a separate contract.
  */
 export const codexHookOutputSchemas = {
   SessionStart: contextOutput('SessionStart'),
@@ -261,11 +292,26 @@ export const codexHookOutputSchemas = {
   }),
   PreCompact: compactOutput,
   PostCompact: compactOutput,
+  PreModelRequest: z.unknown(),
+  PostModelRequest: z.unknown(),
   Stop: stopOutput,
   SubagentStop: stopOutput,
   // Only `systemMessage`: `continue` and every other key fail the parse.
   Interrupt: z.strictObject({ systemMessage: z.string().optional() }),
 } as const satisfies Record<CodexHookEventName, z.ZodType>;
+
+/**
+ * The MCP tool result's structuredContent for a synchronous PostModelRequest hook.
+ * An omitted charge contributes zero. Codex applies charges to completed
+ * responses and failed responses with reported usage.
+ */
+export const codexPostModelRequestMcpStructuredContentSchema = z
+  .looseObject({ extra_codex_rollout_budget_units: z.number().nonnegative().optional() })
+  .nullable();
+
+export type CodexPostModelRequestMcpStructuredContent = z.infer<
+  typeof codexPostModelRequestMcpStructuredContentSchema
+>;
 
 /** The stdout JSON for one specific event, for example `CodexHookOutputFor<'Stop'>`. */
 export type CodexHookOutputFor<Name extends CodexHookEventName> = z.infer<

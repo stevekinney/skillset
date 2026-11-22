@@ -46,6 +46,7 @@ const webSearchSchema = z.looseObject({
  * allowlist: Codex 0.160 has no per-agent tool allowlist array.
  */
 export const codexToolsSchema = z.looseObject({
+  client_search_provider: z.enum(['standalone', 'search_mcp']).optional(),
   experimental_request_user_input: enabledToggleSchema.optional(),
   update_plan: enabledToggleSchema.optional(),
   web_search: webSearchSchema.optional(),

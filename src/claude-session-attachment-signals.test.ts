@@ -56,6 +56,7 @@ const bodies: Record<string, Record<string, unknown>> = {
     reminderType: 'full',
   },
   plan_mode_exit: { planExists: true, planFilePath: '/plan.md' },
+  plugin_note: { plugin: 'fixture-notes', rowUuid: 'row-1', content: [], heldContent: ['note'] },
   queued_command: {
     prompt: [{ type: 'text', text: 'go' }],
     commandMode: 'task-notification',
@@ -140,6 +141,26 @@ describe('signal attachments', () => {
   it('does not overlap the types accepted by tag alone', () => {
     for (const type of claudeSessionUnobservedAttachmentTypes)
       expect(Object.keys(bodies)).not.toContain(type);
+  });
+
+  it('reads delivered Mod notes and validates their persisted fields', () => {
+    const delivered = { type: 'plugin_note' as const, rowUuid: 'row-1', content: ['note'] };
+    for (const sentAs of [undefined, 'beside', 'system'] as const) {
+      expect(claudeSessionAttachmentSchema.parse({ ...delivered, sentAs })).toEqual({
+        ...delivered,
+        sentAs,
+      });
+    }
+    for (const invalid of [
+      { rowUuid: 1 },
+      { content: 'note' },
+      { heldContent: [null] },
+      { sentAs: 'unknown' },
+    ]) {
+      expect(claudeSessionAttachmentSchema.safeParse({ ...delivered, ...invalid }).success).toBe(
+        false,
+      );
+    }
   });
 
   it('rejects a bad hook event, task status and reminder type', () => {

@@ -48,6 +48,7 @@ export const claudeAgentFrontmatterSchema = z.object({
     .enum(['default', 'acceptEdits', 'auto', 'dontAsk', 'bypassPermissions', 'plan', 'manual'])
     .optional(),
   maxTurns: z.number().int().positive().optional(),
+  autoCompactWindow: z.int().min(100_000).optional(),
   skills: z.array(z.string()).optional(),
   // Any item: Claude Code drops an invalid item and still loads the agent, so
   // validation warns (via claudeAgentMcpItemProblems) instead of failing the parse.
@@ -71,6 +72,17 @@ export const claudeAgentFrontmatterSchema = z.object({
 /** Validated Claude Code subagent frontmatter. */
 export type ClaudeAgentFrontmatter = z.infer<typeof claudeAgentFrontmatterSchema>;
 
+const codexRoleFeaturesSchema = z.looseObject({
+  shell_tool: z.literal(false).optional(),
+  apps: z.literal(false).optional(),
+  plugins: z.literal(false).optional(),
+  memories: z.literal(false).optional(),
+  request_permissions_tool: z.literal(false).optional(),
+});
+
+/** Features a Codex role may turn off in its inherited configuration. */
+export const codexAgentDisableFeatures = Object.keys(codexRoleFeaturesSchema.shape);
+
 /**
  * A Codex custom agent file (`.codex/agents/<name>.toml`), as parsed TOML.
  * `name`, `description`, and `developer_instructions` are required. The file
@@ -86,6 +98,8 @@ export const codexAgentSchema = z.looseObject({
   // Model-dependent (Codex documents it as "a non-empty reasoning effort
   // value advertised by the model"), so not an enum.
   model_reasoning_effort: z.string().min(1).optional(),
+  model_reasoning_summary: z.enum(['auto', 'concise', 'detailed', 'none']).optional(),
+  features: codexRoleFeaturesSchema.optional(),
   model_verbosity: z.enum(['low', 'medium', 'high']).optional(),
   sandbox_mode: z.enum(['read-only', 'workspace-write', 'danger-full-access']).optional(),
   nickname_candidates: nicknameCandidatesSchema.optional(),

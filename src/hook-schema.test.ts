@@ -141,7 +141,11 @@ describe('codexHookSettingsSchema', () => {
       { matcher: null },
     ],
     Interrupt: [{ hooks: [] }],
-    state: { 'user:PreToolUse:0:0': { enabled: true, trusted_hash: 'abc' } },
+    PreModelRequest: [{ hooks: [{ type: 'command', command: 'inspect' }] }],
+    PostModelRequest: [{ hooks: [{ type: 'command', command: 'inspect' }] }],
+    state: {
+      'user:PreToolUse:0:0': { enabled: true, trusted_hash: 'abc', trusted_content_hash: 'def' },
+    },
   };
 
   it('parses every Codex handler type and the state table', () => {

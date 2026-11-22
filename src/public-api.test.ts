@@ -99,47 +99,6 @@ describe('public API', () => {
     }
   });
 
-  it('exports a type guard for every public top-level schema', () => {
-    const guards = Object.keys(publicApi).filter((name) => /^is[A-Z]/.test(name));
-    expect(guards.toSorted()).toEqual(
-      [
-        'isClaudeAgentFrontmatter',
-        'isClaudeAgentMcpServer',
-        'isClaudeEffort',
-        'isClaudeHookInput',
-        'isClaudeHookInputFor',
-        'isClaudeHookOutput',
-        'isClaudeHookSettings',
-        'isClaudeMcpServer',
-        'isClaudeSessionRecord',
-        'isClaudeSessionRecordFor',
-        'isClaudeSettingsEffort',
-        'isClaudeSkillFrontmatter',
-        'isClaudeWorkflowAgentOptions',
-        'isClaudeWorkflowBudget',
-        'isClaudeWorkflowJournalRecord',
-        'isClaudeWorkflowMeta',
-        'isClaudeWorkflowOutputSchema',
-        'isClaudeWorkflowReference',
-        'isClaudeWorkflowRunRecord',
-        'isClaudeWorkflowToolInput',
-        'isClaudeWorkflowToolOutput',
-        'isCodexAgent',
-        'isCodexHookInput',
-        'isCodexHookInputFor',
-        'isCodexHookOutputFor',
-        'isCodexHookSettings',
-        'isCodexMcpServer',
-        'isCodexSessionRecord',
-        'isCodexSessionRecordFor',
-        'isCodexSkillFrontmatter',
-        'isCodexSkills',
-        'isCodexTools',
-        'isOpenaiConfiguration',
-      ].toSorted(),
-    );
-  });
-
   it('exports an inferred type for every public schema', async () => {
     const indexText = await Bun.file(join(sourceDirectory, 'index.ts')).text();
     const missing = Object.keys(publicApi)

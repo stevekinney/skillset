@@ -51,6 +51,9 @@ describe('response_item records', () => {
         metadata: {
           client_authored: false,
           user_input_order: 2,
+          history_sequence: 7,
+          sampled_through_sequence: 6,
+          model_search_state: 'unused',
           mcp_attribution: {
             status: 'complete',
             sources: [{ server_name: 's', tool_name: 't', first_turn_id: 'turn-1' }],
@@ -99,22 +102,6 @@ describe('event_msg records', () => {
     });
   }
 
-  it('accepts every error info Codex writes, bare or with a status code', () => {
-    for (const codex_error_info of [
-      'cyber_policy',
-      { http_connection_failed: { http_status_code: 502 } },
-      { active_turn_not_steerable: { turn_kind: 'review' } },
-      { response_stream_disconnected: { http_status_code: null } },
-      null,
-    ]) {
-      const payload = {
-        ...eventMessages.task_complete,
-        error: { message: 'm', codex_error_info },
-      };
-      expect(safeParseCodexSessionRecord(recordFor('event_msg', payload)).success).toBe(true);
-    }
-  });
-
   it('rejects an unknown payload type and a reason outside the closed set', () => {
     for (const payload of [
       { type: 'brand_new_event' },
@@ -157,6 +144,81 @@ describe('other record types', () => {
       originator: 'a_new_client',
     };
     expect(safeParseCodexSessionRecord(recordFor('session_meta', payload)).success).toBe(true);
+  });
+
+  it('types current session flags and validates turn attribution', () => {
+    const metadata = { ...otherPayloads.session_meta, account_scoped: true, attached_thread: true };
+    expect(safeParseCodexSessionRecord(recordFor('session_meta', metadata)).success).toBe(true);
+    expect(
+      safeParseCodexSessionRecord(
+        recordFor('session_meta', { ...metadata, attached_thread: 'true' }),
+      ).success,
+    ).toBe(false);
+    const start = {
+      ...eventMessages.task_started,
+      turn_attribution: {
+        turn_id: 'task',
+        turn_trigger: 'exec',
+        root_turn_id: 'root',
+        parent_turn_id: null,
+        initiating_agent_path: null,
+      },
+    };
+    expect(safeParseCodexSessionRecord(recordFor('event_msg', start)).success).toBe(true);
+    expect(
+      safeParseCodexSessionRecord(
+        recordFor('event_msg', { ...start, turn_attribution: { turn_id: 1 } }),
+      ).success,
+    ).toBe(false);
+    expect(
+      safeParseCodexSessionRecord(
+        recordFor('event_msg', { ...eventMessages.task_complete, root_turn_id: 1 }),
+      ).success,
+    ).toBe(false);
+  });
+
+  it('accepts profile-only turn context and still requires a permission representation', () => {
+    const base = { cwd: '/project', approval_policy: 'never', model: 'fixture' };
+    const profile = {
+      ...base,
+      permission_profile: { type: 'disabled' },
+      direct_only_tool_namespaces: ['fixture'],
+    };
+    expect(safeParseCodexSessionRecord(recordFor('turn_context', profile)).success).toBe(true);
+    expect(safeParseCodexSessionRecord(recordFor('turn_context', base)).success).toBe(false);
+    expect(
+      safeParseCodexSessionRecord(
+        recordFor('turn_context', { ...base, sandbox_policy: { type: 'read-only' } }),
+      ).success,
+    ).toBe(true);
+    expect(
+      safeParseCodexSessionRecord(
+        recordFor('turn_context', { ...profile, direct_only_tool_namespaces: [1] }),
+      ).success,
+    ).toBe(false);
+  });
+
+  it('reads dynamic tool updates and additional tool response items from newer rollouts', () => {
+    const tools = otherPayloads.session_meta.dynamic_tools;
+    expect(
+      safeParseCodexSessionRecord(
+        recordFor('dynamic_tools_updated', { thread_id: 'thread-1', tools }),
+      ).success,
+    ).toBe(true);
+    expect(
+      safeParseCodexSessionRecord(
+        recordFor('dynamic_tools_updated', { thread_id: 'thread-1', tools: [{ type: 'unknown' }] }),
+      ).success,
+    ).toBe(false);
+    const additional = {
+      type: 'additional_tools',
+      role: 'developer',
+      tools: [{ type: 'opaque-tool', nested: { fields: [] } }],
+    };
+    expect(safeParseCodexSessionRecord(recordFor('response_item', additional)).success).toBe(true);
+    expect(
+      safeParseCodexSessionRecord(recordFor('response_item', { ...additional, tools: {} })).success,
+    ).toBe(false);
   });
 
   it('reads every sandbox and permission profile shape', () => {

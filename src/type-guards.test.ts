@@ -1,6 +1,19 @@
 import { describe, expect, it } from 'bun:test';
 
-import { otherPayloads } from '../test/codex-session-fixtures.js';
+import { eventMessages, otherPayloads, responseItems } from '../test/codex-session-fixtures.js';
+import {
+  isClaudeAsyncHookOutput,
+  isClaudeHookOutputOrAsync,
+  isClaudeHookSpecificOutputFor,
+  isClaudeSessionStateRecordFor,
+  isClaudeSessionSystemRecordFor,
+  isClaudeSyncHookOutput,
+  isClaudeWorkflowJournalRecordFor,
+  isCodexEventMessage,
+  isCodexEventMessageFor,
+  isCodexResponseItem,
+  isCodexTurnItem,
+} from './index.js';
 
 import {
   isClaudeAgentFrontmatter,
@@ -166,6 +179,50 @@ describe('hook payload guards', () => {
 });
 
 describe('session record guards', () => {
+  it('checks individual keys in the public Claude and Codex schema maps', () => {
+    const title = { type: 'ai-title', sessionId: 's-1', aiTitle: 'A title' };
+    expect(isClaudeSessionStateRecordFor('ai-title', title)).toBe(true);
+    expect(isClaudeSessionStateRecordFor('custom-title', title)).toBe(false);
+    const system = {
+      type: 'system',
+      subtype: 'agents_killed',
+      uuid: 'record-1',
+      parentUuid: null,
+      sessionId: 's-1',
+      timestamp: '2026-01-01T00:00:00Z',
+      isSidechain: false,
+      userType: 'external',
+      cwd: '/repository',
+      version: '2.1.330',
+    };
+    expect(isClaudeSessionSystemRecordFor('agents_killed', system)).toBe(true);
+    expect(isClaudeSessionSystemRecordFor('api_error', system)).toBe(false);
+    expect(isClaudeWorkflowJournalRecordFor('launched', { type: 'launched' })).toBe(true);
+    expect(isClaudeWorkflowJournalRecordFor('started', { type: 'started' })).toBe(false);
+    expect(isCodexEventMessageFor('task_complete', eventMessages.task_complete)).toBe(true);
+    expect(isCodexEventMessageFor('item_completed', eventMessages.task_complete)).toBe(false);
+  });
+
+  it('exposes separate Claude hook guards and keeps the existing combined guard', () => {
+    const asynchronous = { async: true, decision: 'unused-for-async' };
+    expect(isClaudeAsyncHookOutput(asynchronous)).toBe(true);
+    expect(isClaudeSyncHookOutput(asynchronous)).toBe(false);
+    expect(isClaudeSyncHookOutput({ decision: 'block' })).toBe(true);
+    expect(isClaudeHookOutputOrAsync(asynchronous)).toBe(true);
+    expect(isClaudeHookOutput(asynchronous)).toBe(true);
+    expect(isClaudeHookSpecificOutputFor('Stop', { hookEventName: 'Stop' })).toBe(true);
+    expect(isClaudeHookSpecificOutputFor('Stop', { hookEventName: 'SessionStart' })).toBe(false);
+  });
+
+  it('validates standalone Codex event, response, and turn items through the public exports', () => {
+    expect(isCodexEventMessage(eventMessages.task_complete)).toBe(true);
+    expect(isCodexEventMessage({ type: 'item_completed', content_token_count: -1 })).toBe(false);
+    expect(isCodexResponseItem(responseItems.message)).toBe(true);
+    expect(isCodexResponseItem({ ...responseItems.message, encrypted_content: {} })).toBe(false);
+    const item = { type: 'AgentMessage', id: 'item-1', content: [] };
+    expect(isCodexTurnItem(item)).toBe(true);
+    expect(isCodexTurnItem({ ...item, content: false })).toBe(false);
+  });
   const claudeTitle = { type: 'ai-title', sessionId: 's-1', aiTitle: 'A title' };
   const codexMeta = {
     timestamp: '2026-01-02T03:04:05.678Z',

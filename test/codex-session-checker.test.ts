@@ -40,6 +40,39 @@ describe('check-codex-session-schema', () => {
     return runChecker([meta]).then(({ exitCode }) => expect(exitCode).toBe(0));
   });
 
+  it('reports drift inside both readable and recovered moderation displays', async () => {
+    const displays = [
+      { mode: 'show', version: 1, trustedContacts: 'skip', future_field: true },
+      { mode: 'future_mode' },
+    ];
+    const lines = displays.map((display) =>
+      JSON.stringify({
+        timestamp,
+        type: 'event_msg',
+        payload: {
+          type: 'item_completed',
+          thread_id: 'thread-fixture',
+          turn_id: 'turn-fixture',
+          completed_at_ms: 100,
+          item: {
+            type: 'AgentMessage',
+            id: 'item-fixture',
+            content: [],
+            moderation: {
+              moderated: true,
+              display,
+            },
+          },
+        },
+      }),
+    );
+    const { exitCode, output } = await runChecker(lines);
+    expect(exitCode).not.toBe(0);
+    expect(output).toContain('.payload.item.moderation.display.future_field');
+    expect(output).toContain('.payload.item.moderation.display.mode');
+    expect(output).not.toContain('future_mode');
+  });
+
   it('fails when malformed JSON appears before the last line', async () => {
     const { exitCode } = await runChecker(['{"timestamp": not json', meta]);
     expect(exitCode).not.toBe(0);

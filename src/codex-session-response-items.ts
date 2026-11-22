@@ -15,8 +15,8 @@ import {
  * inside a `compacted` record's `replacement_history` and `guardian_history`.
  *
  * Sources: `codex-rs/protocol/src/models.rs` and the persisted-item filter in
- * `codex-rs/rollout/src/policy.rs` at `rust-v0.160.0`. Not modeled because
- * Codex never persists them: `additional_tools` and `compaction_trigger`.
+ * `codex-rs/rollout/src/policy.rs` at `rust-v0.160.0` and `rust-v0.171.0`.
+ * `additional_tools` is persisted in 0.171.0. `compaction_trigger` is transient.
  *
  * Verified against real data: `message`, `agent_message`, `reasoning`,
  * `function_call`, `function_call_output`, `custom_tool_call`,
@@ -74,13 +74,22 @@ export function buildCodexResponseItemSchema<Extra extends z.ZodRawShape>(extraS
     internal_chat_message_metadata_passthrough: internalMessageMetadataSchema.optional(),
     ...extraShape,
   };
+  const encryptedContent = { encrypted_content: z.string().optional() };
   return z.discriminatedUnion('type', [
+    z.looseObject({
+      type: z.literal('additional_tools'),
+      ...base,
+      role: z.string(),
+      tools: z.array(z.unknown()),
+    }),
     z.looseObject({
       type: z.literal('message'),
       ...base,
+      ...encryptedContent,
       role: messageRoleSchema,
       content: z.array(messageContentItemSchema),
       phase: messagePhaseSchema.optional(),
+      status: z.string().optional(),
     }),
     z.looseObject({
       type: z.literal('agent_message'),
@@ -102,6 +111,7 @@ export function buildCodexResponseItemSchema<Extra extends z.ZodRawShape>(extraS
     z.looseObject({
       type: z.literal('local_shell_call'),
       ...base,
+      ...encryptedContent,
       call_id: z.string().nullable(),
       status: z.enum(['completed', 'in_progress', 'incomplete']),
       action: z.looseObject({
@@ -116,6 +126,8 @@ export function buildCodexResponseItemSchema<Extra extends z.ZodRawShape>(extraS
     z.looseObject({
       type: z.literal('function_call'),
       ...base,
+      ...encryptedContent,
+      status: z.string().optional(),
       name: z.string(),
       namespace: z.string().optional(),
       arguments: z.string(),
@@ -125,6 +137,7 @@ export function buildCodexResponseItemSchema<Extra extends z.ZodRawShape>(extraS
     z.looseObject({
       type: z.literal('tool_search_call'),
       ...base,
+      ...encryptedContent,
       call_id: z.string().nullable(),
       status: itemStatusSchema.optional(),
       execution: toolSearchExecutionSchema,
@@ -141,6 +154,7 @@ export function buildCodexResponseItemSchema<Extra extends z.ZodRawShape>(extraS
     z.looseObject({
       type: z.literal('custom_tool_call'),
       ...base,
+      ...encryptedContent,
       status: itemStatusSchema.optional(),
       call_id: z.string(),
       name: z.string(),
@@ -165,12 +179,14 @@ export function buildCodexResponseItemSchema<Extra extends z.ZodRawShape>(extraS
     z.looseObject({
       type: z.literal('web_search_call'),
       ...base,
+      ...encryptedContent,
       status: z.enum(['in_progress', 'searching', 'completed', 'failed']).optional(),
       action: responsesWebSearchActionSchema.optional(),
     }),
     z.looseObject({
       type: z.literal('image_generation_call'),
       ...base,
+      ...encryptedContent,
       status: z.enum(['in_progress', 'generating', 'completed', 'failed']),
       revised_prompt: z.string().optional(),
       result: z.string(),

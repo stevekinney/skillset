@@ -192,6 +192,33 @@ describe('codexMcpServerSchema', () => {
     expect(messages(codexMcpProblems({ command: 'y', bearer_token: 't' })).length).toBe(1);
   });
 
+  it('validates the EMA token endpoint method and its confidential client requirements', () => {
+    const oauth = {
+      client_id: 'example-client',
+      client_secret: 'fixture-secret',
+      token_endpoint_auth_method: 'client_secret_post',
+    };
+    const server = { url: 'https://example.com/mcp', auth: 'ema_auth', oauth };
+    expect(codexMcpProblems(server)).toEqual([]);
+    expect(
+      codexMcpProblems({
+        ...server,
+        oauth: { ...oauth, token_endpoint_auth_method: 'client_secret_basic' },
+      }),
+    ).toEqual([]);
+    expect(messages(codexMcpProblems({ ...server, auth: 'oauth' }))[0]).toContain(
+      'requires `auth = "ema_auth"`',
+    );
+    expect(
+      messages(codexMcpProblems({ ...server, oauth: { ...oauth, client_secret: undefined } }))[0],
+    ).toContain('requires `oauth.client_secret`');
+    expect(
+      messages(
+        codexMcpProblems({ ...server, oauth: { ...oauth, token_endpoint_auth_method: 'none' } }),
+      )[0],
+    ).toStartWith('oauth.token_endpoint_auth_method:');
+  });
+
   it('enforces oauth and header-helper cross-field rules', () => {
     expect(messages(codexMcpProblems({ url: 'y', oauth: { client_secret: 's' } }))[0]).toContain(
       'requires a non-blank `client_id`',

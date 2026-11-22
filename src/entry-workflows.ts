@@ -86,3 +86,19 @@ export {
   type ClaudeWorkflowToolInput,
   type ClaudeWorkflowToolOutput,
 } from './claude-workflow-tool.js';
+export {
+  isClaudeWorkflowEffort,
+  isClaudeWorkflowIsolation,
+  isClaudeWorkflowJournalRecordFor,
+  isClaudeWorkflowPhase,
+  isClaudeWorkflowProgressAgent,
+  isClaudeWorkflowProgressPhase,
+  isClaudeWorkflowProgressRow,
+  isClaudeWorkflowRunId,
+  claudeWorkflowJournalRecordSchema,
+  claudeWorkflowJournalRecordSchemas,
+  parseClaudeWorkflowJournalRecord,
+  safeParseClaudeWorkflowJournalRecord,
+  type ClaudeWorkflowJournalRecord,
+  type ClaudeWorkflowJournalRecordFor,
+} from './index.js';

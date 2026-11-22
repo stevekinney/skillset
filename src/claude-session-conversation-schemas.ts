@@ -66,6 +66,11 @@ const quotaLimits = z.looseObject({
 export const claudeSessionAssistantRecordSchema = transcriptRecord('assistant', {
   message: claudeSessionAssistantMessageSchema,
   requestId: z.string().optional(),
+  /** Links to the persisted `api-request` record for replay. */
+  requestRef: z.string().optional(),
+  requestedModel: z.string().optional(),
+  promptCacheRequested: z.string().optional(),
+  madeBy: z.string().optional(),
   // Present on API-error placeholders Claude Code writes in place of a response.
   isApiErrorMessage: z.boolean().optional(),
   error: z.enum(claudeSessionApiErrors).optional(),
@@ -92,7 +97,7 @@ export const claudeSessionAssistantRecordSchema = transcriptRecord('assistant', 
 });
 
 /** What `turnOrigin` says started a turn. */
-const turnOrigins = ['human', 'task_notification', 'peer', 'scheduled', 'sdk'] as const;
+const turnOrigins = ['human', 'task_notification', 'peer', 'scheduled', 'sdk', 'system'] as const;
 
 /** A `user` record: a prompt, a tool result, or a message injected on the user's behalf. */
 export const claudeSessionUserRecordSchema = transcriptRecord('user', {
@@ -130,6 +135,8 @@ export const claudeSessionUserRecordSchema = transcriptRecord('user', {
   mcpMeta: looseRecord.optional(),
 });
 
-export type ClaudeSessionAssistantRecord = z.infer<typeof claudeSessionAssistantRecordSchema>;
+/** Parsed value of {@link claudeSessionAssistantRecordSchema}. */
+export type ClaudeSessionAssistantRecord = z.output<typeof claudeSessionAssistantRecordSchema>;
 
-export type ClaudeSessionUserRecord = z.infer<typeof claudeSessionUserRecordSchema>;
+/** Parsed value of {@link claudeSessionUserRecordSchema}. */
+export type ClaudeSessionUserRecord = z.output<typeof claudeSessionUserRecordSchema>;

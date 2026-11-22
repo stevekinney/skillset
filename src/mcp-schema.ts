@@ -174,6 +174,7 @@ const codexOAuthSchema = z.looseObject({
   callback_url: z.string().optional(),
   callback_port: z.number().int().min(0).max(65_535).optional(),
   authorization_server_issuer: z.string().optional(),
+  token_endpoint_auth_method: z.enum(['client_secret_basic', 'client_secret_post']).optional(),
 });
 
 const codexToolSchema = z.looseObject({
@@ -281,6 +282,16 @@ function checkCodexOAuth(section: CodexSection, reject: Reject): void {
   }
 }
 
+function checkEmaTokenEndpointMethod(section: CodexSection, reject: Reject): void {
+  const { oauth } = section;
+  if (oauth?.token_endpoint_auth_method === undefined) return;
+  if (section.auth !== 'ema_auth') {
+    reject('oauth.token_endpoint_auth_method', 'requires `auth = "ema_auth"`');
+  } else if (oauth.client_secret === undefined) {
+    reject('oauth.token_endpoint_auth_method', 'requires `oauth.client_secret`');
+  }
+}
+
 function checkCodexHeadersHelper(section: CodexSection, reject: Reject): void {
   if (isBlank(section.http_headers_helper)) {
     reject('http_headers_helper', 'must not be blank');
@@ -305,6 +316,7 @@ export const codexMcpServerSchema = codexMcpFieldsSchema.superRefine((section, c
 
   checkCodexTransport(section, reject);
   checkCodexOAuth(section, reject);
+  checkEmaTokenEndpointMethod(section, reject);
   checkCodexHeadersHelper(section, reject);
 });
 

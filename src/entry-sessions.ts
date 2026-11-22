@@ -123,3 +123,30 @@ export {
 } from './codex-session-records.js';
 export { codexResponseItemSchema, type CodexResponseItem } from './codex-session-response-items.js';
 export { codexTurnItemSchema, type CodexTurnItem } from './codex-session-turn-items.js';
+export {
+  isClaudeSessionAssistantContentBlock,
+  isClaudeSessionAssistantMessage,
+  isClaudeSessionAssistantRecord,
+  isClaudeSessionAttachment,
+  isClaudeSessionAttachmentRecord,
+  isClaudeSessionStateRecordFor,
+  isClaudeSessionSystemRecord,
+  isClaudeSessionSystemRecordFor,
+  isClaudeSessionToolUseResult,
+  isClaudeSessionUsage,
+  isClaudeSessionUserContentBlock,
+  isClaudeSessionUserMessage,
+  isClaudeSessionUserRecord,
+  isCodexCompactedPayload,
+  isCodexDynamicToolsUpdatedPayload,
+  isCodexEventMessage,
+  isCodexEventMessageFor,
+  isCodexResponseItem,
+  isCodexSessionMetaPayload,
+  isCodexTurnContextPayload,
+  isCodexTurnItem,
+  type ClaudeSessionStateRecordFor,
+  type ClaudeSessionSystemRecordFor,
+  codexDynamicToolsUpdatedPayloadSchema,
+  type CodexDynamicToolsUpdatedPayload,
+} from './index.js';

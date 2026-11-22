@@ -103,6 +103,8 @@ const items: Record<string, Record<string, unknown>[]> = {
       kind: 'started',
       agent_thread_id: 't',
       agent_path: '/root/a',
+      model: null,
+      reasoning_effort: null,
     },
   ],
   WebSearch: [

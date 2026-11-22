@@ -18,8 +18,7 @@ import {
  * `codex-rs/protocol/src/protocol.rs`, at `rust-v0.160.0`. Verified against
  * real data: `token_usage_record`, `world_state`,
  * `inter_agent_communication_metadata`. From the Rust source only, unverified
- * by data: `inter_agent_communication`, `security_risk_score`; and loose
- * because no real file contains one: `retained_context`, `realtime_item`.
+ * by data: `inter_agent_communication`, `security_risk_score`, `realtime_item`.
  *
  * `world_state.state` is a `serde_json::Map` in Rust, so any key is legal. The
  * keys real files carry are named below and everything else is allowed.
@@ -29,7 +28,7 @@ import {
  *   always an empty object in real files, so their shape is unknown.
  * - `world_state.state.environments.environments`: keyed by environment id, so
  *   the keys are data (each value is modeled).
- * - `retained_context` and `realtime_item` payloads: see above.
+ * - `retained_context` payloads: their shape is unverified by data.
  */
 
 export const tokenUsageRecordPayloadSchema = z.looseObject({
@@ -82,6 +81,7 @@ export const worldStatePayloadSchema = z.looseObject({
       .optional(),
     managed_developer_instructions: z.record(z.string(), z.unknown()).optional(),
     model: z.string().optional(),
+    model_catalog: z.string().optional(),
     multi_agent_mode: z
       .looseObject({
         mode: multiAgentModeSchema.optional(),
@@ -134,5 +134,61 @@ export const securityRiskScorePayloadSchema = z.looseObject({
   sampled_at: z.string().optional(),
 });
 
-/** No real rollout contains a `retained_context` or `realtime_item` record, so the payload is left open. */
+const realtimeBase = {
+  id: z.string(),
+  realtime_session_id: z.string(),
+  observed_at_ms: z.int().nullish(),
+};
+const realtimeTranscript = { role: z.enum(['user', 'assistant']), text: z.string() };
+const realtimeHandoff = {
+  source_event_ids: z.array(z.string()),
+  input_item_id: z.string(),
+  input: z.string(),
+};
+
+/** RealtimeItem as written by the tagged Codex 0.171 rollout history writer. */
+export const realtimeItemPayloadSchema = z.discriminatedUnion('type', [
+  z.looseObject({ ...realtimeBase, type: z.literal('realtime_session_started') }),
+  z.looseObject({
+    ...realtimeBase,
+    type: z.literal('frame'),
+    channels: z.looseObject({ voice_transcript: z.looseObject(realtimeTranscript) }),
+  }),
+  z.looseObject({
+    ...realtimeBase,
+    type: z.literal('transcript_segment'),
+    ...realtimeTranscript,
+  }),
+  z.looseObject({
+    ...realtimeBase,
+    type: z.literal('bem_item_promoted'),
+    turn_id: z.string(),
+    item_id: z.string(),
+    presentation: z.discriminatedUnion('type', [
+      z.looseObject({ type: z.literal('whole_item') }),
+      z.looseObject({ type: z.literal('inline_markdown') }),
+      z.looseObject({ type: z.literal('inline_visualization'), index: z.uint32() }),
+    ]),
+  }),
+  z.looseObject({
+    ...realtimeBase,
+    type: z.literal('realtime_session_closed'),
+    outcome: z.enum(['ended', 'failed']),
+  }),
+  z.looseObject({
+    ...realtimeBase,
+    ...realtimeHandoff,
+    type: z.literal('turn_input_accepted'),
+    handoff_id: z.string(),
+    turn_id: z.string(),
+    mode: z.enum(['start', 'steer']),
+  }),
+  z.looseObject({
+    ...realtimeBase,
+    ...realtimeHandoff,
+    type: z.literal('session_end_input_saved'),
+  }),
+]);
+
+/** Retained-context payloads remain open pending rollout evidence. */
 export const openRecordPayloadSchema = z.record(z.string(), z.unknown());

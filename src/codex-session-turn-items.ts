@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { messagePhaseSchema, toolOutputSchema } from './codex-session-content.js';
 import { durationSchema, reasoningEffortSchema } from './codex-session-shared.js';
 import {
+  agentMessageModerationSchema,
   agentStatusSchema,
   extensionItemSchema,
   fileChangeSchema,
@@ -59,6 +60,7 @@ export const codexTurnItemSchema = z.discriminatedUnion('type', [
   z.looseObject({
     type: z.literal('AgentMessage'),
     id: z.string(),
+    moderation: agentMessageModerationSchema.optional(),
     content: z.array(z.looseObject({ type: z.literal('Text'), text: z.string() })),
     phase: messagePhaseSchema.optional(),
     memory_citation: z
@@ -162,6 +164,8 @@ export const codexTurnItemSchema = z.discriminatedUnion('type', [
     kind: z.enum(['started', 'interacted', 'interrupted', 'completed']),
     agent_thread_id: z.string(),
     agent_path: z.string(),
+    model: z.string().nullish(),
+    reasoning_effort: reasoningEffortSchema.nullish(),
   }),
   z.looseObject({
     type: z.literal('WebSearch'),
@@ -217,6 +221,7 @@ export const codexTurnItemSchema = z.discriminatedUnion('type', [
     type: z.literal('McpToolCall'),
     id: z.string(),
     server: z.string(),
+    environmentId: z.string().optional(),
     tool: z.string(),
     arguments: z.unknown(),
     connectorId: z.string().optional(),

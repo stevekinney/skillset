@@ -168,4 +168,10 @@ export const claudeSessionSystemRecordSchema = z.discriminatedUnion('subtype', [
   }),
 ]);
 
-export type ClaudeSessionSystemRecord = z.infer<typeof claudeSessionSystemRecordSchema>;
+/** Parsed value of {@link claudeSessionSystemRecordSchema}. */
+export type ClaudeSessionSystemRecord = z.output<typeof claudeSessionSystemRecordSchema>;
+
+/** Parsed value for a key in {@link claudeSessionSystemRecordSchemas}. */
+export type ClaudeSessionSystemRecordFor<
+  Key extends keyof typeof claudeSessionSystemRecordSchemas,
+> = z.output<(typeof claudeSessionSystemRecordSchemas)[Key]>;

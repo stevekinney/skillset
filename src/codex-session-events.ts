@@ -51,6 +51,9 @@ const codexErrorInfoSchema = z.union([
     'rate_limit_exceeded',
     'flex_unavailable',
     'server_overloaded',
+    'model_not_found',
+    'policy_capacity_unavailable',
+    'inference_hook_denied',
     'cyber_policy',
     'bio_policy',
     'misalignment_policy_violation',
@@ -119,6 +122,7 @@ const threadSettingsSchema = z.looseObject({
   service_tier: z.string().optional(),
   approval_policy: approvalPolicySchema,
   approvals_reviewer: approvalsReviewerSchema,
+  requested_approvals_reviewer: approvalsReviewerSchema.optional(),
   permission_profile: permissionProfileSchema,
   active_permission_profile: activePermissionProfileSchema.optional(),
   cwd: z.string(),
@@ -143,11 +147,22 @@ export const codexEventMessageSchemas = {
     thread_id: z.string(),
     turn_id: z.string(),
     item: codexTurnItemSchema,
+    content_token_count: z.int().nonnegative().optional(),
     started_at_ms: z.number().optional(),
-    completed_at_ms: z.number(),
+    // Codex restores this default when reading old Plan completions.
+    completed_at_ms: z.number().default(0),
   }),
   task_started: z.looseObject({
     type: z.literal('task_started'),
+    turn_attribution: z
+      .looseObject({
+        turn_id: z.string(),
+        turn_trigger: z.string().nullish(),
+        parent_turn_id: z.string().nullish(),
+        initiating_agent_path: z.string().nullish(),
+        root_turn_id: z.string().nullish(),
+      })
+      .optional(),
     turn_id: z.string(),
     root_turn_id: z.string().optional(),
     trace_id: z.string().optional(),
@@ -157,12 +172,14 @@ export const codexEventMessageSchemas = {
   }),
   task_complete: z.looseObject({
     type: z.literal('task_complete'),
+    root_turn_id: z.string().optional(),
     turn_id: z.string(),
     last_agent_message: z.string().nullable(),
     error: z
       .looseObject({
         message: z.string(),
         codex_error_info: codexErrorInfoSchema.nullable().optional(),
+        rejected_audio_file_ids: z.array(z.string()).optional(),
       })
       .optional(),
     time_to_first_token_ms: z.number().nullable().optional(),
@@ -174,6 +191,7 @@ export const codexEventMessageSchemas = {
       .looseObject({
         total_token_usage: tokenUsageSchema,
         last_token_usage: tokenUsageSchema,
+        last_usage_includes_reasoning: z.boolean().optional(),
         model_context_window: z.number().nullable().optional(),
       })
       .nullable(),

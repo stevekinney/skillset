@@ -71,7 +71,7 @@ bun run package:check    # Run publint + @arethetypeswrong/cli on packed tarball
 
 1. **Pure and side-effect free**: no filesystem, network, or environment access in `src/`, and nothing runs at import. Callers read files and pass in their text.
 
-2. **Verified, not guessed**: every schema field and rule comes from what the tool actually accepts (binary schemas, published schemas, docs). Follow `.claude/skills/tool-format-research` before adding or removing one, and record the result in `tool-format-reference`. Where acceptance is unverified, prefer a warning over an error.
+2. **Verified, not guessed**: every schema field and rule comes from what the tool actually accepts (binary schemas, published schemas, docs). Follow `.claude/skills/maintain-provider-compatibility` before adding or removing one, and record the result in `tool-format-reference`. Where acceptance is unverified, prefer a warning over an error.
 
 3. **Runtime-Neutral Published Code**: `src/` must not use Bun-only runtime APIs (`Bun.file`, `Bun.env`, `Bun.serve`, etc.). Those APIs are fine in `scripts/` and test files, but must not appear in published library output.
 

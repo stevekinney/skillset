@@ -15,6 +15,7 @@ const bodies: Record<string, Record<string, unknown>> = {
     addedLines: ['- a'],
     addedTypes: ['a'],
     builtInTypes: ['Explore'],
+    builtInPluginTypes: ['fixture:reviewer'],
     isInitial: true,
     removedTypes: [],
     showConcurrencyNote: true,
@@ -134,7 +135,13 @@ const bodies: Record<string, Record<string, unknown>> = {
     reason: 'session_start',
     context: { userEmail: 'a@example.test', gitStatus: 'clean' },
   },
-  skill_listing: { content: 'c', isInitial: true, names: ['a'], skillCount: 1 },
+  skill_listing: {
+    content: 'c',
+    isInitial: true,
+    names: ['a'],
+    skillCount: 1,
+    digests: ['a-hash'],
+  },
   structured_output: { data: { anything: 1 }, toolUseID: 't-1' },
 };
 
@@ -199,6 +206,21 @@ describe('claudeSessionAttachmentRecordSchema', () => {
       renderedRole: 'system',
     });
     expect(record.attachment.type).toBe('output_style');
+  });
+
+  it('accepts a session context without an account email', () => {
+    expect(
+      claudeSessionAttachmentRecordSchema.safeParse({
+        ...chain,
+        attachment: { type: 'session_context', context: {} },
+      }).success,
+    ).toBe(true);
+    expect(
+      claudeSessionAttachmentRecordSchema.safeParse({
+        ...chain,
+        attachment: { type: 'session_context', context: { userEmail: 123 } },
+      }).success,
+    ).toBe(false);
   });
 
   it('rejects a record whose attachment is not one of the known shapes', () => {

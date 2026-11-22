@@ -1,5 +1,6 @@
 import { $ } from 'bun';
 import pkg from '../package.json' with { type: 'json' };
+import { writeProviderJsonSchemas } from './provider-json-schemas.js';
 
 const entrypoints = [
   './src/index.ts',
@@ -48,5 +49,6 @@ await Promise.all(
 );
 
 await $`bun run tsc --declaration --emitDeclarationOnly --project tsconfig.build.json`;
+await writeProviderJsonSchemas('schemas');
 
 console.log('Build complete.');

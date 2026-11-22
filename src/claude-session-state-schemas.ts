@@ -35,6 +35,8 @@ const modelUsage = z.looseObject({
   thinkingTokens: z.number().optional(),
   cacheReadInputTokens: z.number(),
   cacheCreationInputTokens: z.number(),
+  cacheCreationEphemeral1hInputTokens: z.number().optional(),
+  cacheCreationEphemeral5mInputTokens: z.number().optional(),
   webSearchRequests: z.number(),
   costUSD: z.number(),
   contextWindow: z.number().optional(),
@@ -214,6 +216,22 @@ export const claudeSessionStateRecordSchemas = {
     querySource: z.string().optional(),
     shapeHash: z.string().optional(),
     params: z.unknown(),
+    // Request ID that supplies the retained prefix of this delta.
+    base: z.string().optional(),
+    keep: z.number().optional(),
+    tail: z.array(z.string()).optional(),
+    cacheControl: z
+      .array(
+        z.looseObject({
+          path: z.array(z.union([z.string(), z.number()])),
+          value: z.looseObject({
+            type: z.literal('ephemeral'),
+            ttl: z.enum(['5m', '1h']).optional(),
+          }),
+        }),
+      )
+      .optional(),
+    requestDigest: z.string().optional(),
   }),
   'artifact-comment-monitor': sessionRecord('artifact-comment-monitor', {
     ...sessionId,
@@ -227,3 +245,7 @@ export const claudeSessionStateRecordSchemas = {
     artifacts: z.unknown(),
   }),
 };
+
+/** Parsed value for a key in {@link claudeSessionStateRecordSchemas}. */
+export type ClaudeSessionStateRecordFor<Key extends keyof typeof claudeSessionStateRecordSchemas> =
+  z.output<(typeof claudeSessionStateRecordSchemas)[Key]>;

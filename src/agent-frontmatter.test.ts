@@ -14,6 +14,7 @@ const full = {
   model: 'haiku',
   permissionMode: 'plan',
   maxTurns: 10,
+  autoCompactWindow: 100_000,
   skills: ['code-style'],
   mcpServers: ['codex'],
   hooks: { PreToolUse: [] },
@@ -32,6 +33,12 @@ describe('claudeAgentFrontmatterSchema', () => {
     expect(claudeAgentFrontmatterSchema.parse(full) as unknown).toEqual(full);
     expect(() => claudeAgentFrontmatterSchema.parse({ name: 'a' })).toThrow();
     expect(() => claudeAgentFrontmatterSchema.parse({ description: 'b' })).toThrow();
+  });
+
+  it('rejects an auto-compaction window below 100,000 tokens', () => {
+    expect(
+      claudeAgentFrontmatterSchema.safeParse({ ...minimal, autoCompactWindow: 99_999 }).success,
+    ).toBe(false);
   });
 
   it('rejects invalid enums', () => {
@@ -102,6 +109,22 @@ describe('parseClaudeAgentMapping', () => {
 });
 
 describe('codexAgentSchema', () => {
+  it('validates reasoning summaries and the supported disable-only role overrides', () => {
+    const role = {
+      ...minimal,
+      developer_instructions: 'Review.',
+      model_reasoning_summary: 'detailed',
+    };
+    const features = { shell_tool: false, other_future_flag: true } as const;
+    expect(codexAgentSchema.parse({ ...role, features }).features).toEqual(features);
+    expect(codexAgentSchema.safeParse({ ...role, features: { shell_tool: true } }).success).toBe(
+      false,
+    );
+    expect(
+      codexAgentSchema.safeParse({ ...role, model_reasoning_summary: 'verbose' }).success,
+    ).toBe(false);
+  });
+
   const required = { name: 'reviewer', description: 'Reviews.', developer_instructions: 'Review.' };
 
   it('requires name, description, and developer_instructions', () => {

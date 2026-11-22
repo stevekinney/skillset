@@ -4,6 +4,7 @@ import { codexCompactedPayloadSchema } from './codex-session-compaction.js';
 import { harnessMetadataSchema } from './codex-session-content.js';
 import { codexEventMessageSchema } from './codex-session-events.js';
 import {
+  codexDynamicToolsUpdatedPayloadSchema,
   codexSessionMetaPayloadSchema,
   codexTurnContextPayloadSchema,
 } from './codex-session-metadata.js';
@@ -12,6 +13,7 @@ import {
   interAgentCommunicationMetadataPayloadSchema,
   interAgentCommunicationPayloadSchema,
   openRecordPayloadSchema,
+  realtimeItemPayloadSchema,
   securityRiskScorePayloadSchema,
   tokenUsageRecordPayloadSchema,
   worldStatePayloadSchema,
@@ -37,6 +39,7 @@ import {
 /** Every `type` a rollout line can carry. */
 export const codexSessionRecordTypes = [
   'session_meta',
+  'dynamic_tools_updated',
   'response_item',
   'inter_agent_communication',
   'inter_agent_communication_metadata',
@@ -54,6 +57,7 @@ export type CodexSessionRecordType = (typeof codexSessionRecordTypes)[number];
 
 /** Every `payload.type` a `response_item` record can carry. */
 export const codexResponseItemTypes = [
+  'additional_tools',
   'message',
   'agent_message',
   'reasoning',
@@ -87,6 +91,7 @@ function record<Type extends CodexSessionRecordType, Payload extends z.ZodType>(
 /** The schema for each record `type`, for example `codexSessionRecordSchemas.event_msg`. */
 export const codexSessionRecordSchemas = {
   session_meta: record('session_meta', codexSessionMetaPayloadSchema),
+  dynamic_tools_updated: record('dynamic_tools_updated', codexDynamicToolsUpdatedPayloadSchema),
   response_item: z.looseObject({
     ...envelope,
     type: z.literal('response_item'),
@@ -108,7 +113,7 @@ export const codexSessionRecordSchemas = {
   retained_context: record('retained_context', openRecordPayloadSchema),
   security_risk_score: record('security_risk_score', securityRiskScorePayloadSchema),
   event_msg: record('event_msg', codexEventMessageSchema),
-  realtime_item: record('realtime_item', openRecordPayloadSchema),
+  realtime_item: record('realtime_item', realtimeItemPayloadSchema),
 } as const;
 
 const schemas = codexSessionRecordSchemas;
@@ -116,6 +121,7 @@ const schemas = codexSessionRecordSchemas;
 /** One rollout line, discriminated on `type`. */
 export const codexSessionRecordSchema = z.discriminatedUnion('type', [
   schemas.session_meta,
+  schemas.dynamic_tools_updated,
   schemas.response_item,
   schemas.inter_agent_communication,
   schemas.inter_agent_communication_metadata,

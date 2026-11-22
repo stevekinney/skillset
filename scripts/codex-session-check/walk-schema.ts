@@ -30,6 +30,8 @@ interface Definition {
   discriminator?: string;
   element?: SchemaNode;
   innerType?: SchemaNode;
+  in?: SchemaNode;
+  out?: SchemaNode;
   valueType?: SchemaNode;
   entries?: Record<string, string>;
   values?: unknown[];
@@ -68,6 +70,13 @@ export function walkSchema(
   if (wrapperTypes.has(definition.type)) {
     if (value === undefined || (value === null && definition.type === 'nullable')) return;
     if (definition.innerType) walkSchema(definition.innerType, value, path, group, statistics);
+    return;
+  }
+  // Inspect the raw value against a preprocessor's declared shape so recovery
+  // in the parser cannot hide additional fields from the corpus audit.
+  if (definition.type === 'pipe' && definition.in && definition.out) {
+    const shape = definitionOf(definition.in).type === 'transform' ? definition.out : definition.in;
+    walkSchema(shape, value, path, group, statistics);
     return;
   }
   walkNode(definition, value, path, group, key, statistics);
@@ -175,8 +184,7 @@ function walkUnion(
 ): void {
   const options = definition.options ?? [];
   if (definition.discriminator) {
-    const option = pickByDiscriminator(options, definition.discriminator, value);
-    if (option) walkSchema(option, value, path, group, statistics);
+    walkDiscriminatedUnion(options, definition.discriminator, value, path, group, statistics);
     return;
   }
   const openEnum = findOpenEnum(options);
@@ -188,6 +196,20 @@ function walkUnion(
   }
   const option = pickByShape(options, value);
   if (option) walkSchema(option, value, path, group, statistics);
+}
+
+function walkDiscriminatedUnion(
+  options: SchemaNode[],
+  discriminator: string,
+  value: unknown,
+  path: string,
+  group: string,
+  statistics: Statistics,
+): void {
+  const option = pickByDiscriminator(options, discriminator, value);
+  if (option) walkSchema(option, value, path, group, statistics);
+  else if (isPlainObject(value) && Object.hasOwn(value, discriminator))
+    increment(statistics.unmodeled, `${group}:${path}.${discriminator}`);
 }
 
 function pickByDiscriminator(
@@ -202,8 +224,8 @@ function pickByDiscriminator(
 
 /**
  * A union of an enum and a catch-all string is an "open enum": known values plus
- * anything else. `openEnum` builds the catch-all as a `z.custom` string (so the
- * inferred type keeps the literals); a plain `z.string()` is accepted too.
+ * anything else. `openEnum` keeps the literals in the inferred type while
+ * the catch-all accepts any string.
  */
 function findOpenEnum(options: SchemaNode[]): SchemaNode | undefined {
   const types = options.map((option) => definitionOf(option).type);

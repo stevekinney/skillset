@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { imageDetailSchema } from './codex-session-content.js';
+import { audioReferenceSchema, imageDetailSchema } from './codex-session-content.js';
 
 /**
  * Building blocks for the `TurnItem` variants in `codex-session-turn-items.ts`
@@ -13,6 +13,48 @@ export const status = {
 };
 
 export const nullableString = z.string().nullable();
+
+// Matches the versioned display payload Codex 0.171 writes.
+const moderationDisplaySchema = z.discriminatedUnion('mode', [
+  z.looseObject({
+    mode: z.literal('show'),
+    version: z.literal(1),
+    annotation: z
+      .looseObject({
+        kind: z.literal('wellbeingHelpline'),
+        subject: z.enum(['answer', 'prompt']),
+      })
+      .nullish(),
+    trustedContacts: z.enum(['check', 'skip']),
+  }),
+  z.looseObject({
+    mode: z.literal('hide'),
+    version: z.literal(1),
+    replacement: z.looseObject({ kind: z.literal('wellbeingPromptHelpline') }),
+  }),
+  z.looseObject({
+    mode: z.literal('block'),
+    version: z.literal(1),
+    reason: z.discriminatedUnion('kind', [
+      z.looseObject({ kind: z.literal('protection'), protectionType: z.string() }),
+      z.looseObject({ kind: z.literal('cyber'), trustedAccess: z.boolean().nullish() }),
+    ]),
+  }),
+]);
+
+/** Read stored moderation with Codex's restrictive fallback for unreadable displays. */
+export const agentMessageModerationSchema = z.preprocess(
+  (value) => {
+    if (typeof value !== 'object' || value === null || !('moderated' in value)) return value;
+    if (typeof value.moderated !== 'boolean' || !('display' in value)) return value;
+    const { display, ...moderation } = value;
+    if (display === null || display === undefined) return moderation;
+    return moderationDisplaySchema.safeParse(display).success
+      ? value
+      : { ...moderation, moderated: true };
+  },
+  z.looseObject({ moderated: z.boolean(), display: moderationDisplaySchema.optional() }),
+);
 
 export const userInputSchema = z.discriminatedUnion('type', [
   z.looseObject({
@@ -38,7 +80,7 @@ export const userInputSchema = z.discriminatedUnion('type', [
     path: z.string(),
     detail: imageDetailSchema.optional(),
   }),
-  z.looseObject({ type: z.literal('audio'), audio_url: z.string() }),
+  audioReferenceSchema.safeExtend({ type: z.literal('audio') }),
   z.looseObject({ type: z.literal('local_audio'), path: z.string() }),
   z.looseObject({ type: z.literal('skill'), name: z.string(), path: z.string() }),
   z.looseObject({ type: z.literal('mention'), name: z.string(), path: z.string() }),
@@ -144,22 +186,33 @@ export const extensionItemSchema = z.discriminatedUnion('kind', [
     id: z.string(),
     durationMs: z.number(),
   }),
-  z.looseObject({
-    type: z.literal('Extension'),
-    kind: z.literal('image_gen.generation'),
-    id: z.string(),
-    status: z.enum(['in_progress', 'generating', 'completed', 'failed']),
-    revisedPrompt: nullableString,
-    result: z.string(),
-    transparentBackground: z.boolean().nullable().optional(),
-    failure: z
-      .looseObject({
-        type: z.literal('usageLimitExceeded'),
-        limitId: z.string(),
-        resetsAt: z.number().nullable(),
-      })
-      .nullable()
-      .optional(),
-    savedPath: z.string().optional(),
-  }),
+  z
+    .looseObject({
+      type: z.literal('Extension'),
+      kind: z.literal('image_gen.generation'),
+      id: z.string(),
+      status: z.enum(['in_progress', 'generating', 'completed', 'failed']),
+      revisedPrompt: nullableString,
+      fileId: nullableString.optional(),
+      result: z.string().optional(),
+      generationId: nullableString.optional(),
+      inputImages: z.array(z.looseObject({ path: z.string(), sha256: z.string() })).optional(),
+      transparentBackground: z.boolean().nullable().optional(),
+      failure: z
+        .looseObject({
+          type: z.literal('usageLimitExceeded'),
+          limitId: z.string(),
+          resetsAt: z.number().nullable(),
+        })
+        .nullable()
+        .optional(),
+      savedPath: z.string().optional(),
+    })
+    .refine(({ fileId, result }) => typeof fileId === 'string' || result !== undefined, {
+      message: 'Expected an image file ID or inline result',
+    })
+    .overwrite(({ fileId, result, ...item }) => {
+      // Codex's untagged reference checks the File variant first.
+      return typeof fileId === 'string' ? { ...item, fileId } : { ...item, result };
+    }),
 ]);

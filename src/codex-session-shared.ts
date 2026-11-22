@@ -20,10 +20,9 @@ import { z } from 'zod';
 export function openEnum<const Values extends readonly [string, ...string[]]>(values: Values) {
   // `string & Record<never, never>` accepts any string without absorbing the
   // literals, so the inferred type keeps the known values for autocomplete.
-  return z.union([
-    z.enum(values),
-    z.custom<string & Record<never, never>>((value) => typeof value === 'string'),
-  ]);
+  type OpenString = string & Record<never, never>;
+  const fallback: z.ZodType<OpenString, OpenString> = z.string();
+  return z.union([z.enum(values), fallback]);
 }
 
 /**
@@ -188,5 +187,7 @@ export const planTypeSchema = z.enum([
   'edu',
   'edu_plus',
   'edu_pro',
+  'sci',
+  'sci_plus',
   'unknown',
 ]);

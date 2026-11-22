@@ -107,4 +107,5 @@ export const claudeWorkflowBudgetSchema = z.object({
 });
 export type ClaudeWorkflowBudget = z.infer<typeof claudeWorkflowBudgetSchema>;
 
-export type ClaudeWorkflowRunId = z.infer<typeof claudeWorkflowRunIdSchema>;
+/** Parsed value of {@link claudeWorkflowRunIdSchema}. */
+export type ClaudeWorkflowRunId = z.output<typeof claudeWorkflowRunIdSchema>;

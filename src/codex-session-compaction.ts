@@ -78,4 +78,5 @@ export const codexCompactedPayloadSchema = z.looseObject({
     .optional(),
 });
 
-export type CodexCompactedPayload = z.infer<typeof codexCompactedPayloadSchema>;
+/** Parsed value of {@link codexCompactedPayloadSchema}. */
+export type CodexCompactedPayload = z.output<typeof codexCompactedPayloadSchema>;

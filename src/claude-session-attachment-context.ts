@@ -66,6 +66,7 @@ export const claudeSessionContextAttachments = [
     addedLines: strings,
     addedTypes: strings,
     builtInTypes: strings.optional(),
+    builtInPluginTypes: strings.optional(),
     isInitial: z.boolean(),
     removedTypes: strings,
     showConcurrencyNote: z.boolean(),
@@ -241,13 +242,14 @@ export const claudeSessionContextAttachments = [
   attachmentVariant('session_context', {
     changed: z.boolean().optional(),
     reason: z.enum(['session_start']).optional(),
-    context: z.looseObject({ userEmail: z.string(), gitStatus: z.string().optional() }),
+    context: z.looseObject({ userEmail: z.string().optional(), gitStatus: z.string().optional() }),
   }),
   attachmentVariant('skill_listing', {
     content: z.string(),
     isInitial: z.boolean(),
     names: strings,
     skillCount: z.number(),
+    digests: strings.optional(),
   }),
   attachmentVariant('structured_output', {
     // The agent's own structured result; its shape is whatever schema the caller asked for.

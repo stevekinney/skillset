@@ -160,6 +160,12 @@ export function safeParseClaudeHookOutput(payload: unknown) {
   return claudeHookOutputOrAsyncSchema.safeParse(payload);
 }
 
-export type ClaudeHookSpecificOutput = z.infer<typeof claudeHookSpecificOutputSchema>;
+/** Parsed value of {@link claudeHookOutputOrAsyncSchema}. */
+export type ClaudeHookOutputOrAsync = z.output<typeof claudeHookOutputOrAsyncSchema>;
 
-export type ClaudeHookOutputOrAsync = z.infer<typeof claudeHookOutputOrAsyncSchema>;
+/** Parsed value of {@link claudeHookSpecificOutputSchema}. */
+export type ClaudeHookSpecificOutput = z.output<typeof claudeHookSpecificOutputSchema>;
+
+/** Parsed value for a key in {@link claudeHookSpecificOutputSchemas}. */
+export type ClaudeHookSpecificOutputFor<Key extends keyof typeof claudeHookSpecificOutputSchemas> =
+  z.output<(typeof claudeHookSpecificOutputSchemas)[Key]>;

@@ -57,3 +57,16 @@ export {
   isCodexHookInputFor,
   isCodexHookOutputFor,
 } from './type-guards.js';
+export {
+  type ClaudeHookSpecificOutputFor,
+  codexPostModelRequestMcpStructuredContentSchema,
+  type CodexPostModelRequestMcpStructuredContent,
+  isClaudeAsyncHookOutput,
+  isClaudeCommonHookInput,
+  isClaudeHookOutputOrAsync,
+  isClaudeHookSpecificOutput,
+  isClaudeHookSpecificOutputFor,
+  isClaudePermissionUpdate,
+  isClaudeSyncHookOutput,
+  isCodexPostModelRequestMcpStructuredContent,
+} from './index.js';

@@ -97,7 +97,15 @@ const dynamicToolSchema = z.discriminatedUnion('type', [
   }),
 ]);
 
+/** Persists the current dynamic tools for a thread after a live update. */
+export const codexDynamicToolsUpdatedPayloadSchema = z.looseObject({
+  thread_id: z.string(),
+  tools: z.array(dynamicToolSchema),
+});
+
 export const codexSessionMetaPayloadSchema = z.looseObject({
+  account_scoped: z.boolean().optional(),
+  attached_thread: z.boolean().optional(),
   creator_user_id: z.string().optional(),
   creator_account_id: z.string().optional(),
   // Older rollouts omit `session_id`; Codex then reuses `id`.
@@ -151,38 +159,51 @@ export const codexSessionMetaPayloadSchema = z.looseObject({
     .optional(),
 });
 
-export const codexTurnContextPayloadSchema = z.looseObject({
-  turn_id: z.string().optional(),
-  root_turn_id: z.string().optional(),
-  disabled_plugin_ids: z.array(z.string()).optional(),
-  cwd: z.string(),
-  workspace_roots: z.array(z.string()).optional(),
-  current_date: z.string().optional(),
-  timezone: z.string().optional(),
-  approval_policy: approvalPolicySchema,
-  approvals_reviewer: approvalsReviewerSchema.optional(),
-  sandbox_policy: sandboxPolicySchema,
-  permission_profile: permissionProfileSchema.optional(),
-  active_permission_profile: activePermissionProfileSchema.optional(),
-  network: z
-    .looseObject({
-      allowed_domains: z.array(z.string()),
-      denied_domains: z.array(z.string()),
-    })
-    .optional(),
-  file_system_sandbox_policy: fileSystemSandboxPolicySchema.optional(),
-  model: z.string(),
-  comp_hash: z.string().optional(),
-  personality: personalitySchema.optional(),
-  collaboration_mode: collaborationModeSchema.optional(),
-  multi_agent_version: multiAgentVersionSchema.optional(),
-  multi_agent_mode: multiAgentModeSchema.optional(),
-  realtime_active: z.boolean().optional(),
-  cyber_access_program: cyberAccessProgramSchema.optional(),
-  effort: reasoningEffortSchema.optional(),
-  summary: reasoningSummarySchema,
-});
+export const codexTurnContextPayloadSchema = z
+  .looseObject({
+    turn_id: z.string().optional(),
+    root_turn_id: z.string().optional(),
+    disabled_plugin_ids: z.array(z.string()).optional(),
+    direct_only_tool_namespaces: z.array(z.string()).optional(),
+    cwd: z.string(),
+    workspace_roots: z.array(z.string()).optional(),
+    current_date: z.string().optional(),
+    timezone: z.string().optional(),
+    approval_policy: approvalPolicySchema,
+    approvals_reviewer: approvalsReviewerSchema.optional(),
+    sandbox_policy: sandboxPolicySchema.nullish(),
+    permission_profile: permissionProfileSchema.nullish(),
+    active_permission_profile: activePermissionProfileSchema.optional(),
+    network: z
+      .looseObject({
+        allowed_domains: z.array(z.string()),
+        denied_domains: z.array(z.string()),
+      })
+      .optional(),
+    file_system_sandbox_policy: fileSystemSandboxPolicySchema.optional(),
+    model: z.string(),
+    comp_hash: z.string().optional(),
+    personality: personalitySchema.optional(),
+    collaboration_mode: collaborationModeSchema.optional(),
+    multi_agent_version: multiAgentVersionSchema.optional(),
+    multi_agent_mode: multiAgentModeSchema.optional(),
+    realtime_active: z.boolean().optional(),
+    cyber_access_program: cyberAccessProgramSchema.optional(),
+    effort: reasoningEffortSchema.optional(),
+    summary: reasoningSummarySchema.nullish(),
+  })
+  .refine((payload) => payload.permission_profile != null || payload.sandbox_policy != null, {
+    path: ['permission_profile'],
+    message: 'Expected a permission profile or a legacy sandbox policy',
+  });
 
-export type CodexSessionMetaPayload = z.infer<typeof codexSessionMetaPayloadSchema>;
+/** Parsed value of {@link codexDynamicToolsUpdatedPayloadSchema}. */
+export type CodexDynamicToolsUpdatedPayload = z.output<
+  typeof codexDynamicToolsUpdatedPayloadSchema
+>;
 
-export type CodexTurnContextPayload = z.infer<typeof codexTurnContextPayloadSchema>;
+/** Parsed value of {@link codexSessionMetaPayloadSchema}. */
+export type CodexSessionMetaPayload = z.output<typeof codexSessionMetaPayloadSchema>;
+
+/** Parsed value of {@link codexTurnContextPayloadSchema}. */
+export type CodexTurnContextPayload = z.output<typeof codexTurnContextPayloadSchema>;

@@ -197,4 +197,5 @@ export const toolFields = {
   mcp_server: mcpServerSchema.optional(),
 };
 
-export type ClaudeCommonHookInput = z.infer<typeof claudeCommonHookInputSchema>;
+/** Parsed value of {@link claudeCommonHookInputSchema}. */
+export type ClaudeCommonHookInput = z.output<typeof claudeCommonHookInputSchema>;

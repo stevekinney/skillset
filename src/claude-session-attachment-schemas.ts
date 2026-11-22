@@ -75,4 +75,5 @@ export const claudeSessionAttachmentRecordSchema = transcriptRecord('attachment'
   renderedRole: z.enum(['system', 'user']).optional(),
 });
 
-export type ClaudeSessionAttachmentRecord = z.infer<typeof claudeSessionAttachmentRecordSchema>;
+/** Parsed value of {@link claudeSessionAttachmentRecordSchema}. */
+export type ClaudeSessionAttachmentRecord = z.output<typeof claudeSessionAttachmentRecordSchema>;

@@ -96,6 +96,14 @@ export const claudeSessionSignalAttachments = [
     reminderType: z.enum(['full', 'sparse']),
   }),
   attachmentVariant('plan_mode_exit', { planExists: z.boolean(), planFilePath: z.string() }),
+  attachmentVariant('plugin_note', {
+    plugin: z.string().optional(),
+    rowUuid: z.string(),
+    content: strings,
+    // A note waiting for a later model request or to be restored after a restart.
+    heldContent: strings.optional(),
+    sentAs: z.enum(['beside', 'system']).optional(),
+  }),
   attachmentVariant('queued_command', {
     prompt: z.union([z.string(), z.array(claudeSessionUserContentBlockSchema)]),
     commandMode: z.enum(['prompt', 'task-notification']).optional(),

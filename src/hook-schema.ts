@@ -14,6 +14,11 @@ const commonHandlerFields = {
   once: z.boolean().optional(),
 };
 
+/** Failure modes shared by native Claude handlers and the hooks source. */
+export const claudeHookFailureModes = ['continue', 'block'] as const;
+
+const claudeOnFailure = z.enum(claudeHookFailureModes).optional();
+
 const cloudField = z.enum(['device', 'skip']).optional();
 
 const claudeHandlerSchemas = {
@@ -27,6 +32,7 @@ const claudeHandlerSchemas = {
     rewakeMessage: z.string().min(1).optional(),
     rewakeSummary: z.string().min(1).optional(),
     cloud: cloudField,
+    onFailure: claudeOnFailure,
     ...commonHandlerFields,
   }),
   prompt: z.looseObject({
@@ -41,6 +47,7 @@ const claudeHandlerSchemas = {
     server: z.string(),
     tool: z.string(),
     input: z.record(z.string(), z.unknown()).optional(),
+    onFailure: claudeOnFailure,
     ...commonHandlerFields,
   }),
   http: z.looseObject({
@@ -49,6 +56,7 @@ const claudeHandlerSchemas = {
     headers: z.record(z.string(), z.string()).optional(),
     allowedEnvVars: z.array(z.string()).optional(),
     cloud: cloudField,
+    onFailure: claudeOnFailure,
     ...commonHandlerFields,
   }),
   agent: z.looseObject({
@@ -191,7 +199,11 @@ export const codexHookSettingsSchema = z.looseObject({
   state: z
     .record(
       z.string(),
-      z.looseObject({ enabled: z.boolean().optional(), trusted_hash: z.string().optional() }),
+      z.looseObject({
+        enabled: z.boolean().optional(),
+        trusted_hash: z.string().optional(),
+        trusted_content_hash: z.string().optional(),
+      }),
     )
     .optional(),
 });

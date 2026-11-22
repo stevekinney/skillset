@@ -12,17 +12,28 @@ const tokenUsage = {
   reasoning_output_tokens: 1,
   total_tokens: 13,
 };
-const metadata = { turn_id: 'turn-1', create_time: 1.5, content_item_kinds: ['user.text'] };
+const metadata = {
+  turn_id: 'turn-1',
+  create_time: 1.5,
+  content_item_kinds: ['user.text'],
+  content_item_metadata: [{ provenance: { type: 'user' } }],
+};
 
 /** One `response_item` payload per `payload.type`. */
 export const responseItems = {
+  additional_tools: {
+    type: 'additional_tools',
+    role: 'developer',
+    tools: [{ type: 'function', name: 'fixture', parameters: {} }],
+  },
   message: {
     type: 'message',
     id: 'msg-1',
     role: 'assistant',
     phase: 'final_answer',
+    status: 'completed',
     content: [
-      { type: 'output_text', text: 'hello' },
+      { type: 'output_text', text: 'hello', annotations: [], logprobs: [] },
       { type: 'input_text', text: 'hi' },
       { type: 'input_image', image_url: 'data:image/png;base64,AAAA', detail: 'high' },
       { type: 'input_audio', audio_url: 'https://example.com/a.wav' },
@@ -165,6 +176,7 @@ export const eventMessages = {
     info: {
       total_token_usage: tokenUsage,
       last_token_usage: tokenUsage,
+      last_usage_includes_reasoning: true,
       model_context_window: 100,
     },
     rate_limits: {
@@ -188,6 +200,7 @@ export const eventMessages = {
       model_provider_id: 'openai',
       approval_policy: 'never',
       approvals_reviewer: 'user',
+      requested_approvals_reviewer: 'user',
       permission_profile: permissionProfile,
       cwd: '/work',
       reasoning_effort: 'medium',
@@ -215,6 +228,7 @@ export const eventMessages = {
 
 /** The payloads of the record types that are not `response_item` or `event_msg`. */
 export const otherPayloads = {
+  dynamic_tools_updated: { thread_id: 'thread-1', tools: [] },
   session_meta: {
     id: 'thread-1',
     timestamp,
@@ -262,6 +276,7 @@ export const otherPayloads = {
     full: true,
     state: {
       collaboration_mode: { mode: 'default', model: 'gpt-5.5' },
+      model_catalog: 'fixture-hash',
       environments: {
         environments: { local: { cwd: '/work', shell: 'zsh', status: 'available' } },
       },
@@ -292,5 +307,5 @@ export const otherPayloads = {
   },
   retained_context: { anything: 'goes' },
   security_risk_score: { scores: { exfiltration: 0.1 } },
-  realtime_item: { anything: 'goes' },
+  realtime_item: { type: 'realtime_session_started', id: 'event', realtime_session_id: 'voice' },
 } as const;

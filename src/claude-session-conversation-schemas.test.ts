@@ -79,6 +79,22 @@ describe('user records', () => {
     });
   }
 
+  it('reads external task notifications and validates saved task run IDs', () => {
+    const origin = { kind: 'task-notification', subkind: 'external-event' };
+    expect(parsesUser({ origin })).toBe(true);
+    expect(parsesUser({ origin: { ...origin, runId: 'run-1' } })).toBe(true);
+    expect(parsesUser({ origin: { kind: 'task-notification', runId: 123 } })).toBe(false);
+  });
+
+  it('reads Mod-submitted prompts with their saved system attribution', () => {
+    const origin = { kind: 'plugin', name: 'fixture-notes' };
+    const fields = { turnOrigin: 'system', promptSource: 'system' };
+    expect(parsesUser({ ...fields, origin })).toBe(true);
+    expect(parsesUser({ ...fields, origin: { ...origin, asUser: true } })).toBe(true);
+    expect(parsesUser({ ...fields, origin: { kind: 'plugin', asUser: true } })).toBe(false);
+    expect(parsesUser({ ...fields, origin: { ...origin, asUser: false } })).toBe(false);
+  });
+
   it('parses a user record with every optional field', () => {
     expect(
       parsesUser({
@@ -165,6 +181,18 @@ describe('assistant records', () => {
         wireToolInputs: { 't-1': { command: 'ls' } },
       }),
     ).toBe(true);
+  });
+
+  it('types the assistant reference to its persisted API request', () => {
+    expect(
+      parsesAssistant({
+        requestRef: 'req-1',
+        requestedModel: 'claude-sonnet-5-5',
+        promptCacheRequested: '5m',
+        madeBy: 'model',
+      }),
+    ).toBe(true);
+    expect(parsesAssistant({ requestRef: 42 })).toBe(false);
   });
 
   it('rejects an out-of-set effort, API error and quota status', () => {
