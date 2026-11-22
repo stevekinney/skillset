@@ -2,6 +2,8 @@ import { describe, expect, it } from 'bun:test';
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import packageDefinition from '../package.json' with { type: 'json' };
+import * as workflowGlobals from './claude-workflow-globals.js';
 import * as publicApi from './index.js';
 
 /**
@@ -118,11 +120,22 @@ describe('public API', () => {
     const documentedType = (name: string) =>
       mentioned(name) || mentioned(`${name[0]!.toLowerCase()}${name.slice(1)}Schema`);
     const undocumented = [
-      ...Object.keys(publicApi).filter((name) => !mentioned(name)),
+      ...[...Object.keys(publicApi), ...Object.keys(workflowGlobals)].filter(
+        (name) => !mentioned(name),
+      ),
       ...typeNames.filter((name) => !documentedType(name)),
     ];
 
     expect(undocumented).toEqual([]);
+  });
+
+  it('documents every package export path in the README', async () => {
+    const readme = await Bun.file(join(sourceDirectory, '..', 'README.md')).text();
+    const missing = Object.keys(packageDefinition.exports)
+      .map((subpath) => `${packageDefinition.name}${subpath.slice(1)}`)
+      .filter((specifier) => !readme.includes(`\`${specifier}\``));
+
+    expect(missing).toEqual([]);
   });
 
   describe('subpath entry points', () => {

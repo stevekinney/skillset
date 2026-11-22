@@ -2,53 +2,35 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Essential Commands
+## Essential commands
 
-### Development
+Use Bun 1.4.0 locally to match the [CI matrix](.github/workflows/ci.yaml), which checks Node 22 and 24 on Linux, macOS, and Windows.
 
-```bash
-bun run build             # Build for production (outputs to dist/)
-```
+| Command                               | Purpose                                                                        |
+| ------------------------------------- | ------------------------------------------------------------------------------ |
+| `bun install --frozen-lockfile`       | Install dependencies and register Lefthook through `prepare`.                  |
+| `bun run check`                       | Run `format:check`, `lint`, and `typecheck`.                                   |
+| `bun run validate`                    | Run formatting, lint, both type checks, tests, build, and both package checks. |
+| `bun test`                            | Run the suite. Pass a path or `-t <pattern>` to narrow the run.                |
+| `bun test --watch`                    | Rerun tests when files change.                                                 |
+| `bun run test:coverage`               | Run tests with coverage reporting.                                             |
+| `bun run format` / `bun run lint:fix` | Apply formatting or lint fixes.                                                |
+| `bun run typecheck:test`              | Check the test TypeScript project.                                             |
+| `bun run build`                       | Build ESM, TypeScript declarations, and standalone JSON Schemas.               |
+| `bun run tsc`                         | Invoke the local TypeScript compiler directly.                                 |
+| `bun run package:check`               | Check the built package, then verify the packed export map.                    |
+| `bun run verify:package-types`        | Check the package from an isolated consumer install.                           |
+| `bun run clean`                       | Remove `dist/`, generated `schemas/`, coverage, and TypeScript build caches.   |
 
-### Testing
-
-```bash
-bun test                  # Run all tests
-bun test src/utils        # Run tests in specific directory
-bun test logger           # Run tests matching pattern
-bun test --watch          # Watch mode
-bun test --coverage       # Generate coverage report
-```
-
-### Code Quality
-
-```bash
-bun run lint             # Check linting errors
-bun run lint:fix         # Auto-fix linting errors
-bun run typecheck        # TypeScript type checking (src + scripts)
-bun run typecheck:test   # TypeScript type checking (test files)
-bun run format           # Format all files with Prettier
-bun run format:check     # Check formatting without changes
-bun run check            # Fast local sanity: format:check + lint + typecheck
-bun run validate         # Full gate: format:check + lint + typecheck + typecheck:test + test + build + package:check + verify:package-types
-```
-
-### Utilities
-
-```bash
-bun run clean            # Clean build artifacts (dist/, coverage/, caches)
-bun run package:check    # Run publint + @arethetypeswrong/cli on packed tarball
-```
-
-**`package:check` packs with `bun pm pack` itself and hands the tarball to `attw`, rather than using `attw --pack`.** `attw --pack` shells out to a hardcoded `npm pack` internally, which breaks when it runs nested inside an active `npm publish` — `npm publish` triggers the `prepublishOnly` script (`bun run validate`, which includes `package:check`) from _inside its own npm process_, and a second `npm pack` invoked from there fails silently, leaving `attw` to report a baffling `ENOENT: ... open '@lostgradient-skillset-<version>.tgz'` instead of the real cause. `scripts/check-package.ts` avoids this entirely. If that `ENOENT` ever reappears, something reintroduced `attw --pack`.
+See the [README development commands](README.md#development) for provider drift, Claude Mod declarations, and corpus checks. The [shared maintenance skill](.agents/skills/maintain-provider-compatibility/SKILL.md) covers how to verify and record drift.
 
 ## Architecture Overview
 
-`skillset` is a pure library: Zod schemas, type guards, and validators for Claude Code's and Codex's configuration and runtime formats. Nothing in `src/` reads or writes files, and nothing runs at import. See `README.md` for the public API and `.claude/skills/tool-format-reference` for the verified facts each schema encodes.
+`skillset` is a pure library: Zod schemas, type guards, and validators for Claude Code's and Codex's configuration and runtime formats. The runtime library accepts text or parsed data. Callers own filesystem, network, and environment access. See `README.md` for the public API and `.claude/skills/tool-format-reference` for the verified facts each schema encodes.
 
 ### Module Layout (`src/`)
 
-- `index.ts` — the public API. `public-api.test.ts` fails if a module exports a schema `index.ts` doesn't, if a public schema has no inferred type, or if any export is missing from `README.md`.
+- `index.ts` — the public API. `public-api.test.ts` fails if a module exports a schema `index.ts` doesn't, if a public schema has no inferred type, or if a public export or package subpath is missing from `README.md`.
 - `entry-hooks.ts` / `entry-sessions.ts` / `entry-workflows.ts` — the `./hooks`, `./sessions`, and `./workflows` subpath entry points. Each re-exports a slice of `index.ts`; `public-api.test.ts` checks each is a subset of the root, and the build uses `splitting` so they share one copy of each schema and error class.
 - `frontmatter.ts` — Claude Code's and Codex's SKILL.md frontmatter schemas, `agents/openai.yaml`, the two effort schemas, and `parseClaudeSkillMapping`/`parseCodexSkillMapping`.
 - `agent-frontmatter.ts` — Claude Code's subagent frontmatter schema, the Codex agent file schema (loose: it may carry any config.toml key), and `parseClaudeAgentMapping`.
@@ -64,7 +46,7 @@ bun run package:check    # Run publint + @arethetypeswrong/cli on packed tarball
 - `claude-hook-shared.ts` / `claude-hook-input-schemas.ts` / `claude-hook-output-schemas.ts` / `codex-hook-payloads.ts` — schemas for every hook event's stdin input and stdout output (inputs loose, Codex outputs strict), with `parse*HookInput`/`parse*HookOutput` helpers.
 - `claude-session-*.ts` / `codex-session-*.ts` — Zod schemas for Claude Code session transcripts and Codex session rollouts (JSONL), checked against real sessions by `scripts/check-claude-session-schema.ts` and `scripts/check-codex-session-schema.ts` (`bun run check:claude-sessions` / `check:codex-sessions`).
 - `claude-workflow-*.ts` — Zod schemas, script-API types, and static helpers for Claude Code workflow scripts: `meta` (`claude-workflow-meta.ts`), `agent()` options and the output-schema root (`-agent-options.ts`), the Workflow tool input/output, `workflow()` reference, and `budget` (`-tool.ts`), the `wf_<id>.json` run record (`-run-record.ts`), acorn-based source helpers (`-ast.ts`, `-source.ts` for `meta` and forbidden APIs, `-calls.ts` for `agent()`/`workflow()`/`phase()` calls), and types for the script globals (`-script-api.ts`). `claude-workflow-globals.ts` declares those globals and is shipped as the `@lostgradient/skillset/workflow-globals` subpath; it must never be re-exported from `index.ts`, or `agent` and `pipeline` become globals for every consumer. Checked against real workflows by `scripts/check-workflow-schema.ts` (`bun run check:workflows`); `scripts/verify-package-types.ts` type-checks a plain JavaScript script against the shipped globals.
-- `type-guards.ts` — a schema-backed type guard for every public top-level schema (narrows to `z.input`).
+- `type-guards.ts` holds schema-backed guards for standalone schemas and keyed maps. The guards narrow to `z.input`. Inferred public types describe parsed output.
 - `byte-order-mark.ts` — `withoutByteOrderMark`, used before parsing any user-editable file.
 
 ### Core Design Principles
@@ -81,30 +63,17 @@ bun run package:check    # Run publint + @arethetypeswrong/cli on packed tarball
 - **Import paths**: Use standard TS/ESM imports; no `@/*` path alias (it leaks into `.d.ts` files).
 - **Library output**: Dual-emit — `dist/node/` for Node consumers, `dist/bun/` for Bun consumers. The `exports` map routes consumers automatically.
 
-### Library Packaging
+### Library packaging
 
-The build produces:
+`scripts/build.ts` emits split ESM bundles in `dist/node/` and `dist/bun/`, with shared declarations in `dist/`. The root and domain subpaths share chunked schema and error-class bindings within each build. `package.json` is the source of truth for the root, `/hooks`, `/sessions`, `/workflows`, `/workflow-globals`, manifest, and JSON Schema export paths.
 
-- `dist/node/index.js` — ESM bundle, `Bun.build target: 'node'`, all deps external
-- `dist/bun/index.js` — ESM bundle, `Bun.build target: 'bun'`, all deps external
-- `dist/index.d.ts` — TypeScript declarations (shared)
-- `entry-hooks`, `entry-sessions`, `entry-workflows`, and `claude-workflow-globals` — the same for each subpath, with shared modules split into chunks
+`scripts/provider-json-schemas.ts` builds `schemas/claude-code.json` and `schemas/codex.json` from exported Zod schemas and keyed schema maps. The files are generated package artifacts. Adjust their source schemas and rerun the build to change them. The registry keeps each file self-contained with local references, and the workflow budget schema stays in the JavaScript API because it includes methods.
 
-The `exports` map in `package.json`:
+`bun run package:check` runs [publint](https://publint.dev/) and uses `bun pm pack` to hand an actual tarball to [Are The Types Wrong?](https://github.com/arethetypeswrong/arethetypeswrong.github.io). Passing the tarball directly avoids nested npm packing inside the publish lifecycle. `bun run verify:package-types` installs the tarball into a temporary npm consumer project, checks declarations with `skipLibCheck: false`, and exercises the published subpaths, workflow globals, schema and guard pairs in Node and Bun, and standalone JSON Schemas in a Draft 2020-12 validator.
 
-```json
-{
-  ".": {
-    "types": "./dist/index.d.ts",
-    "bun": "./dist/bun/index.js",
-    "import": "./dist/node/index.js",
-    "default": "./dist/node/index.js"
-  },
-  "./package.json": "./package.json"
-}
-```
+### Release workflow
 
-Package validation runs as part of `validate`: `publint` checks the exports map structure and `@arethetypeswrong/cli` checks type resolution across resolution modes.
+[GitHub Actions](.github/workflows/release.yaml) runs on a `vX.Y.Z` tag. The tag must match `package.json` as checked by `bun run verify:release-version --tag=vX.Y.Z`. The workflow installs dependencies, runs `preflight:publish` and `validate`, and publishes through npm trusted publishing with provenance before creating a GitHub release. Local npm lifecycle hooks use `prepare` for Git hook setup, `prepack` to build artifacts, and `prepublishOnly` to run preflight and full validation. CI runs those gates explicitly before publishing to keep the trusted-publishing token valid for the upload.
 
 ### Git Hooks Architecture
 
@@ -121,21 +90,20 @@ Hooks print only on failure (`output: [failure, execution_out]` in `lefthook.yml
 
 `.claude/settings.json` wires up two project-level Claude Code hooks (scripts in `.claude/hooks/`):
 
-- **format-on-edit** (`PostToolUse` on `Edit`/`Write`): runs `prettier --write --ignore-unknown` on the file Claude just edited, so edits always match the project style and never trip the format gate. Fail-safe — no-ops if Prettier isn't installed yet.
+- **format-on-edit** (`PostToolUse` on `Edit`/`Write`): runs `prettier --write --ignore-unknown` on the file Claude just edited, when `jq` and the local Prettier executable are available. The hook lets edits proceed if formatting fails.
 - **protect-env** (`PreToolUse` on `Write`): blocks writes to `.env` / `.env.*` (except `.env.example`) so secrets aren't clobbered. Edit those files manually.
 
-Both scripts exit 0 (no-op) when their dependencies are missing, so a freshly cloned template never breaks a session.
+Both hooks skip their work when `jq` is unavailable.
 
 ### Types
 
-There is no shared `src/types.ts` in this template. Add shared or domain-specific types near their modules as needed.
+Keep public types beside the schemas or domain modules that define them.
 
 ## Development Patterns
 
 ### Adding New Features
 
-1. **Exports**: Export every new schema, its inferred type, and (for a top-level schema) a type guard from `index.ts`, and document each in `README.md`. `public-api.test.ts` enforces all three.
-2. **Types**: Domain-specific types live near their modules.
+Export public schemas, inferred types, and guards from `index.ts` and the relevant domain entry point. For public schema maps, include the keyed type and guard. Document each in the README. The source API test checks coverage and the packed consumer check verifies that each schema, type, and guard agrees.
 
 ### Testing Approach
 
@@ -144,7 +112,7 @@ There is no shared `src/types.ts` in this template. Add shared or domain-specifi
 - `test/setup.ts` is preloaded by `bunfig.toml` — it resets mocks and system time in `afterEach`. All tests get this automatically.
 - Oxlint rules are relaxed for test files. You can use `any`, non-null assertions, and other patterns normally flagged.
 - A separate `tsconfig.test.json` provides relaxed TypeScript settings for tests (checked by `bun run typecheck:test`).
-- Coverage threshold is 100% for `src/`. Run `bun test --coverage` to see the report.
+- Coverage is reported by default. See `bunfig.toml` for the configured thresholds.
 
 ### Import Organization
 
@@ -159,7 +127,7 @@ No path alias (`@/*`) — use relative imports everywhere.
 
 ## Bun-Specific Considerations
 
-- Always use `bun` commands, not `npm` or `yarn`.
+- Use `bun` for development and dependency installation. Package validation uses npm to exercise the same install path as npm consumers.
 - The lockfile in this repo is `bun.lock`.
 - Bun provides native TypeScript execution without precompilation.
 - For one-off package execution, use `bun x` for packages already in `devDependencies` rather than `bunx`, which can pull remote versions.
@@ -186,4 +154,3 @@ When a Bun equivalent doesn't exist or Node's API is more appropriate, use the `
 - **bunfig.toml**: Configures the `.md` text loader, forces Bun runtime for scripts, and sets up `bun test` with preload, coverage, and 100% thresholds.
 - **TypeScript**: Uses Bun types; Node type libs are not included by default.
 - **Oxlint**: Rust-based linter with built-in TypeScript, promise, unicorn, and import plugins. Type-aware rules enabled via `--type-aware --tsconfig ./tsconfig.json`. Test files have relaxed rules.
-- **Testing**: Run tests in parallel via `bun test --parallel`.
